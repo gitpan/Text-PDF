@@ -140,7 +140,8 @@ use Text::PDF::Number;
 use Text::PDF::Objind;
 use Text::PDF::String;
 
-$VERSION = "0.17";      # GST   18-JUL-2001     Handle \) in strings and tidy up endobj handling, no uninitialized warnings
+$VERSION = "0.18";      # MJPH   1-DEC-2001     add encryption hooks
+#$VERSION = "0.17";      # GST   18-JUL-2001     Handle \) in strings and tidy up endobj handling, no uninitialized warnings
 #$VERSION = "0.16";      # GST   18-JUL-2001     Major performance tweaks
 #$VERSION = "0.15";      # GST   30-MAY-2001     Memory leaks fixed
 #$VERSION = "0.14";      # MJPH   2-MAY-2001     More little bug fixes, added read_objnum
@@ -818,7 +819,7 @@ sub ship_out
         next if grep {$_ eq $objind} @{$self->{' free'}};
 
         $self->{' locs'}{$objind->uid} = $fh->tell;
-        ($objnum, $objgen) = @{$self->{' objects'}{$objind->uid}}[0..1]
+        ($objnum, $objgen) = @{$self->{' objects'}{$objind->uid}}[0..1];
         $fh->printf("%d %d obj\n", $objnum, $objgen);
         $objind->outobjdeep($fh, $self, 'objnum' => $objnum, 'objgen' => $objgen);
         $fh->print("\nendobj\n");
