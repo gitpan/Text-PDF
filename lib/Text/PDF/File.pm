@@ -139,7 +139,8 @@ use Text::PDF::Number;
 use Text::PDF::Objind;
 use Text::PDF::String;
 
-$VERSION = "0.03";      # MJPH  14-JUL-1999     Correct paths for tarball release
+$VERSION = "0.04";      # MJPH  14-JUL-1999     Correct paths for tarball release
+#$VERSION = "0.03";      # MJPH  14-JUL-1999     Correct paths for tarball release
 #$VERSION = "0.02";     # MJPH  30-JUN-1999     Transfer from old library
 
 BEGIN
