@@ -138,14 +138,16 @@ use Text::PDF::Number;
 use Text::PDF::Objind;
 use Text::PDF::String;
 
-$VERSION = "0.09";	# MJPH	31-MAR-2000	Copy trailer dictionary properly
+$VERSION = "0.11";      # MJPH  18-JUL-2000     Add pdfstamp.plx and more debugging
+#$VERSION = "0.10";	     # MJPH	 27-JUN-2000     Tidy up some bugs - names
+#$VERSION = "0.09";	     # MJPH	 31-MAR-2000     Copy trailer dictionary properly
 #$VERSION = "0.08";      # MJPH  07-FEB-2000     Add null element
 #$VERSION = "0.07";      # MJPH  01-DEC-1999     Debug for pdfbklt
 #$VERSION = "0.06";      # MJPH  11-SEP-1999     Sort out unixisms
 #$VERSION = "0.05";      # MJPH   9-SEP-1999     Add ship_out
 #$VERSION = "0.04";      # MJPH  14-JUL-1999     Correct paths for tarball release
 #$VERSION = "0.03";      # MJPH  14-JUL-1999     Correct paths for tarball release
-#$VERSION = "0.02";     # MJPH  30-JUN-1999      Transfer from old library
+#$VERSION = "0.02";      # MJPH  30-JUN-1999     Transfer from old library
 
 BEGIN
 {
@@ -218,6 +220,7 @@ sub open
         {
             $self->{' update'} = 1;
             $self->{' OUTFILE'} = $fh;
+            $self->{' fname'} = $fname;
         }
     }
     $fh->read($buf, 255);
@@ -268,6 +271,7 @@ sub append_file
     $fh = $self->{' INFILE'};
     $fh->seek($self->{' epos'}, 0);
     $self->out_trailer($tdict);
+    close($self->{' OUTFILE'});
 }
 
 
@@ -329,19 +333,29 @@ Closes up the open file for output by outputting the trailer etc.
 sub close_file
 {
     my ($self) = @_;
-    my ($fh, $tdict);
+    my ($fh, $tdict, $t);
     
     $tdict = PDFDict();
     $tdict->{'Info'} = $self->{'Info'} if defined $self->{'Info'};
     $tdict->{'Root'} = $self->{' newroot'} ne "" ? $self->{' newroot'} : $self->{'Root'};
 
 # remove all freed objects from the outlist
-    @{$self->{' outlist'}} = grep(!$_->{' isfree'}, @{$self->{' outlist'}});
-    $tdict->{'Size'} = PDFNum(1);
+    @{$self->{' outlist'}} = grep(!$_->{' isfree'}, @{$self->{' outlist'}}) unless ($self->{' update'});
+    $tdict->{'Size'} = $self->{'Size'} || PDFNum(1);
+    $tdict->{'Prev'} = PDFNum($self->{' loc'}) if ($self->{' loc'});
+    if ($self->{' update'})
+    {
+        foreach $t (grep ($_ !~ m/^\s/oi, keys %$self))
+        { $tdict->{$t} = $self->{$t} unless defined $tdict->{$t}; }
+
+        $fh = $self->{' INFILE'};
+        $fh->seek($self->{' epos'}, 0);
+    }
+
     $self->out_trailer($tdict);
     close($self->{' OUTFILE'});
     MacPerl::SetFileInfo("CARO", "TEXT", $self->{' fname'})
-            if ($^O eq "MacOS" && !ref($self-{' fname'}));
+            if ($^O eq "MacOS" && !ref($self->{' fname'}));
     $self;
 }
 
@@ -417,9 +431,10 @@ sub readval
             $res = Text::PDF::Objind->new();
             $res->{' objnum'} = $k;
             $res->{' objgen'} = $value;
-            $res->{' parent'} = $self;
             $self->add_obj($res, $k, $value);
         }
+        $res->{' parent'} = $self;
+        $res->{' realised'} = 0;
     } elsif ($str =~ m/^([0-9]+)\s+([0-9]+)\s+obj$cr?/oi)               # object data
     {
         my ($obj);
@@ -434,8 +449,9 @@ sub readval
         {
             $res = $obj;
             $self->add_obj($res, $k, $value);
+            $res->{' realised'} = 1;
         }
-    } elsif ($str =~ m{^/([a-z+\-!\"\$\&\'\*\,\.\:\;\=\?\@\\\^\_\`\|\~]+)$cr?}oi)        # name
+    } elsif ($str =~ m{^/([a-z0-9+\-!\"\$\&\'\*\,\.\:\;\=\?\@\\\^\_\`\|\~]+)$cr?}oi)        # name
 #    } elsif ($str =~ m{^/([a-z]+)$cr?}oi)        # name
     {
         $value = $1;
@@ -916,4 +932,17 @@ sub _new
 }
 
 1;
+
+=head1 AUTHOR
+
+Martin Hosken Martin_Hosken@sil.org
+
+Copyright Martin Hosken 1999 and onwards
+
+No warranty or expression of effectiveness, least of all regarding anyone's
+safety, is implied in this software or documentation.
+
+=head2 Licensing
+
+This Perl Text::PDF module is licensed under the Perl Artistic License.
 

@@ -40,6 +40,13 @@ source PDF the stream starts.
 
 =head1 METHODS
 
+sub new
+{
+    my ($self) = SUPER::new(@_);
+    $self->{' realised'} = 1;
+    return $self;
+}
+    
 
 =head2 $d->outobjdeep($fh)
 

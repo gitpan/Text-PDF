@@ -8,9 +8,12 @@ use Getopt::Std;
 # $version = "1.200";     # MJPH   6-NOV-1998     Merging external resources and change -r
 # $version = "1.201";     # MJPH  29-DEC-1998     Add test in merge_dict for $v2 not present
 # $version = "1.300";     # MJPH  15-JUN-1999     Remove outlines, etc. when making booklet
-$version = "1.302";     # MJPH  30-NOV-1999     Update to use Text::PDF
+# $version = "1.302";     # MJPH  30-NOV-1999     Update to use Text::PDF
+# $version = "1.302";     # MJPH  11-DEC-1999     Make sure updated root output
+# $version = "1.4";       # MJPH   1-FEB-2000     Add -l and preset paper sizes
+$version = "1.401";     # MJPH  28-JUN-2000     Debug content lists and -r
 
-getopts("b:h:p:qrs:");
+getopts("b:h:lp:qrs:");
 
 if (!defined $ARGV[0])
 {
@@ -23,7 +26,8 @@ if (!defined $ARGV[0])
 modifications at the end.
 
   -b num/size    Specifies which page contains the output page size details [1]
-            or gives the dimensions of the page in pts (x,y).
+            or gives the dimensions of the page in pts (x;y) or A4,ltr,lgl,A5
+  -l        Flag to indicate linear scaling
   -p num    Specifies the number of pages on the output page (1, 2, 4) [2]
   -q        Quiet (no on screen messages)
   -r        Rotates the output (-p 2 rotates automatically, -r rotates back)
@@ -34,23 +38,36 @@ modifications at the end.
                 4   1/4 page right and left bottom (very big gutter)
                 4t  1/4 page right and left top (very big gutter)
                 4r/4l/4rt/4lt   1/4 page always on right or left bottom or top
+                location as a single string: minx;miny;maxx;maxy in pts
 EOT
 }
 
+%sizes=(
+    'a4' => '595;842',
+    'ltr' => '612;792'
+    );
+
+$opt_b = $sizes{lc($opt_b)} if defined $sizes{lc($opt_b)};
 print "Reading file\n" unless $opt_q;
-$p = Text::PDF::File->open($ARGV[0], 1);
+$p = Text::PDF::File->open($ARGV[0], 1) || die "Can't open $ARGV[0]";
 $r = $p->read_obj($p->{'Root'});
 $pgs = $p->read_obj($r->{'Pages'});
 $pgcount = $pgs->{'Count'}->val;
 
 foreach ('Outline', 'Dests', 'Threads', 'AcroForm', 'PageLabels', 'StructTreeRoot')
-{ delete $r->{$_} if defined $r->{$_}; }
+{
+    if (defined $r->{$_})
+    {
+        delete $r->{$_};
+        $p->out_obj($r);
+    }
+}
 
 $pcount = 0;
 proc_pages($pgs);
 
 $opt_p = 2 unless defined $opt_p;
-$opt_r = !$opt_r if ($opt_p == 2);
+$opt_r = !$opt_r if (($opt_p == 2 && $opt_s !~ /2/o) || ($opt_p != 2 && $opt_s =~ /2/o));
 
 if ($opt_b =~ m/^([0-9]+)\;([0-9]+)/oi)
 { @pbox = (0, 0, $1, $2); }
@@ -136,7 +153,9 @@ sub merge_pages
         @prbox = ();
         foreach $n ($pr[$j]->find_prop('MediaBox')->elementsof)
         { push(@prbox, $n->val); }
-        if ($opt_s =~ m/^([0-9])(.?)(.?)/oi)
+        if ($opt_s =~ m/^([0-9]+);([0-9]+);([0-9]+);([0-9]+)/o)
+        { @prbox = ($1, $2, $3, $4); }
+        elsif ($opt_s =~ m/^([0-9])(.?)(.?)/o)
         {
             $is = $1;
             $rl = lc($2);
@@ -160,6 +179,16 @@ sub merge_pages
             $xs = ($pbox[2] - $pbox[0]) / ($prbox[2] - $prbox[0]);
             $ys = ($pbox[3] - $pbox[1]) / ($prbox[3] - $prbox[1]);
             $scale = ($prbox[3] - $prbox[1]) / ($prbox[2] - $prbox[0]);
+            $rot = (($opt_p == 1 || $opt_p == 4) && $is == 2)
+                    || ($opt_p == 2 && $is != 2);
+
+            if ($opt_l)
+            {
+                if ($xs < ($opt_p == 2 ? .5 : 1) * ($opt_r ? $scale * $scale : 1) * $ys)
+                { $ys = $xs / ($opt_r ? $scale * $scale : 1) / ($opt_p == 2 ? .5 : 1); }
+                else
+                { $xs = $ys * ($opt_r ? $scale * $scale : 1) * ($opt_p == 2 ? .5 : 1); }
+            }
             
             if ($opt_p == 1 && $is != 2)            # portrait to portrait
             {
@@ -266,8 +295,9 @@ sub merge_pages
     return 1 unless defined $bp;
     $bp->{'Contents'} = $bp->{' Contents'};
     undef $bp->{' Contents'};
-    foreach (qw(Annots Thumb Beeds))
+    foreach (qw(Annots Thumb Beeds CropBox))
     { delete $bp->{$_} if defined $bp->{$_}; }
+    $bp->bbox(@pbox);
     $p->out_obj($bp);
 }
 
@@ -276,7 +306,7 @@ sub merge_dict
     my ($p1, $p2) = @_;
 
     return $p1 if (ref $p1 eq "Text::PDF::Objind" && ref $p2 eq "Text::PDF::Objind"
-            && ($p1->val)[0] eq ($p2->val)[0]);
+            && $p->{' objects'}{$p1->uid}[0] eq $p->{' objects'}{$p2->uid}[0]);
     $p1 = $p->read_obj($p1) if (ref $p1 eq "Text::PDF::Objind");
     $p2 = $p->read_obj($p2) if (ref $p2 eq "Text::PDF::Objind");
 
@@ -289,7 +319,7 @@ sub merge_dict
         $v1 = $p1->{$k};
         $v2 = $p2->{$k};
         next if $v1 eq $v2 || !defined $v2;     # !defined added v1.201
-        if (ref $v1 eq "Text::PDF::Objind" xor ref $v2 eq "Text::PDF::Objind")
+        if (ref $v1 eq "Text::PDF::Objind" || ref $v2 eq "Text::PDF::Objind")
         {
             $v1 = $p->read_obj($v1) if (ref $v1 eq "Text::PDF::Objind");
             $v2 = $p->read_obj($v2) if (ref $v2 eq "Text::PDF::Objind");
@@ -306,7 +336,8 @@ sub merge_dict
             push (@a1, grep (!$a1{$_}, @a2));
             $p1->{$k} = PDFArray(@a1);
         } elsif (ref $v1 eq "Text::PDF::Dict")
-        { $p1->{$k} = merge_dict($v1->val, $v2->val); }
+#        { $p1->{$k} = merge_dict($v1->val, $v2->val); }
+        { $p1->{$k} = merge_dict($v1, $v2); }
         elsif ($v1->val ne $v2->val)
         { warn "Inconsistent dictionaries at $k with " . $v1->val . " and " . $v2->val; }
     }

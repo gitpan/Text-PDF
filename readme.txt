@@ -24,6 +24,18 @@ Included in the examples directory are some example programs starting from very
 simple PDF creation programs and working up. More extensive samples are included
 as scripts.
 
+SCRIPTS
+
+Installed with this package are the following scripts:
+
+    pdfaddobj   Debug aid to insert data as an object in a file
+    pdfaddpg    Adds a blank page to a PDF file at any location
+    pdfbklt     Turns documents into booklets
+    pdfgetobj   Extracts a particular object from a PDF file (debugging aid)
+    pdfrevert   Removes one layer of edits from a PDF file
+    pdfstamp    Adds the given text in a given font, size to all pages at given
+                location
+
 REQUIREMENTS
 
 This module set requires Compress::Zlib. It is used for compressed streams and

@@ -98,7 +98,7 @@ sub new
     $ff2->{' stream'} = "";
     $ffh = Text::PDF::TTIOString->new(\$ff2->{' stream'});
     $font->out($ffh, 'cvt ', 'fpgm', 'glyf', 'head', 'hhea', 'hmtx', 'loca', 'maxp', 'prep');
-    $ff2->{'Filter'} = PDFName("FlateDecode");
+    $ff2->{'Filter'} = PDFArray(PDFName("FlateDecode"));
     $ff2->{'Length1'} = PDFNum(length($ff2->{' stream'}));
 
     if ($opt{'ToUnicode'})
@@ -124,7 +124,7 @@ sub new
         $touni = PDFDict();
         $parent->new_obj($touni);
         $touni->{' stream'} = $unistr;
-        $touni->{'Filter'} = PDFName("FlateDecode");
+        $touni->{'Filter'} = PDFArray(PDFName("FlateDecode"));
         $self->{'ToUnicode'} = $touni;
     }
     

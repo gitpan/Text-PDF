@@ -50,7 +50,7 @@ use vars qw(@inst %inst $uidc);
 
 BEGIN
 {
-    @inst = qw(parent objnum objgen isfree nextfree uid);
+    @inst = qw(parent objnum objgen isfree nextfree uid realised);
     map {$inst{" $_"} = 1} @inst;
     $uidc = "pdfuid000";
 }
@@ -93,7 +93,7 @@ sub val
 {
     my ($self) = @_;
     
-    $self->{' parent'}->read_obj($self)->val;
+    $self->{' parent'}->read_obj($self)->val unless ($self->{' realised'});
 }
 
 =head2 $r->outobjdeep($fh, $pdf)
@@ -107,7 +107,7 @@ sub outobjdeep
 {
     my ($self, $fh, $pdf) = @_;
 
-    $self->{' parent'}->read_obj($self)->outobjdeep($fh, $pdf);
+    $self->{' parent'}->read_obj($self)->outobjdeep($fh, $pdf) unless ($self->{' realised'});
 }
 
 
@@ -137,7 +137,14 @@ something more useful if an array.
 =cut
 
 sub elementsof
-{ ($_[0]); }
+{
+    my ($self) = @_;
+
+    if ($self->{' realised'})
+    { return ($self); }
+    else
+    { return $self->{' parent'}->read_obj($self)->elementsof; }
+}
 
 
 =head2 $r->empty
@@ -175,6 +182,7 @@ sub merge
 
     for $k (keys %$other)
     { $self->{$k} = $other->{$k} unless $inst{$k}; }
+    $self->{' realised'} = 1;
     bless $self, ref($other);
 }
 

@@ -82,7 +82,7 @@ sub find_prop
         defined $_[0]->{'Parent'} && $_[0]->{'Parent'}->find_prop($_[1]); }
 
 
-=head2 $p->add_font($font)
+=head2 $p->add_font($pdf, $font)
 
 Creates or edits the resource dictionary at this level in the hierarchy. If
 the font is already supported even through the hierarchy, then it is not added.
@@ -91,13 +91,13 @@ the font is already supported even through the hierarchy, then it is not added.
 
 sub add_font
 {
-    my ($self, $font) = @_;
+    my ($self, $font, $pdf) = @_;
     my ($name) = $font->{'Name'}->val;
     my ($dict) = $self->find_prop('Resources');
 
     return $self if ($dict ne "" && defined $dict->{'Font'} && defined $dict->{'Font'}{$name});
     unless (defined $self->{'Resources'})
-    { $self->{'Resources'} = $dict ne ""? $dict->copy : PDFDict(); }
+    { $self->{'Resources'} = $dict ne ""? $dict->copy($pdf) : PDFDict(); }
     $self->{'Resources'}{'Font'} = PDFDict() unless defined $self->{'Resources'}{'Font'};
     $self->{'Resources'}{'Font'}{$name} = $font;
     $self;

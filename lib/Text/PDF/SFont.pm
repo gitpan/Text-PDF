@@ -58,6 +58,17 @@ BEGIN
         164, 136, 137, 147, 148, 130, 183, 145, 140, 139, 194, 202, 200,
         205, 206, 207, 204, 211, 212, 0, 210, 218, 219, 217, 154, 26,
         31, 175, 24, 27, 30, 184, 28, 29, 25],
+        'PDFDocEncoding' => [0 .. 255],
+        'AdobeStandardEncoding' => [
+		0 .. 38, 144, 40 .. 95, 143, 97 .. 126, 0, 0, 0, 0, 0, 0, 0, 
+		0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 
+		0, 0, 0, 0, 0, 0, 0,  161, 162, 163, 135, 165, 134, 167, 164, 
+		39, 141, 171, 136, 137, 147, 148, 0, 133, 129, 130, 183, 0, 
+		182, 128, 145, 140, 142, 187, 131, 139, 0, 191, 0, 96, 180, 
+		26, 31,175, 24, 27, 168, 0, 30, 231, 0, 28, , 25, 29, 132, 
+		0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 198, 0, 170,
+		0, 0, 0, 0, 149, 216, 150, 186, 0, 0, 0, 0, 0, 230, 0, 0, 0, 
+		154, 0, 0, 155, 248, 156, 223, 0, 0, 0, 0],        
                 );
 }
 
@@ -66,6 +77,7 @@ sub new
     my ($class, $parent, $name, $pdfname, $encoding) = @_;
     my ($self) = $class->SUPER::new;
 
+    return undef unless exists $width_data{$pdfname};
     $self->{'Type'} = PDFName("Font");
     $self->{'Subtype'} = PDFName("Type1");
     $self->{'BaseFont'} = PDFName($name);
@@ -130,6 +142,19 @@ sub trim
         $i++;
     }
     return substr($text, 0, $i);
+}
+
+=head2 $f->out_text($text)
+
+Acknowledges the text to be output for subsetting purposes, etc.
+
+=cut
+
+sub out_text
+{
+    my ($self, $text) = @_;
+
+    return PDFStr($text)->as_pdf;
 }
 
 BEGIN
@@ -219,6 +244,25 @@ M:XY`S15[V!K_[X39K3#U1=A*F#VKKT*.PWE`JZ0$VY]R4!=KB[$>%/M.H-YI
 M9F-NU/`2\VRT]]:V\C8GZ9\#6%*`V3NJ>^W':VWIOH9BROO(5:"(2ORBA<YO
 M\%72'C-Z0+*NNBM/*\2?`DHZ30;T(Z94#-N=QH$P8UXG&<%QPES&;._HY>LF
 %/HNICN<`
+EOT
+
+'Symbol' => <<'EOT',
+M>)RED*%/PV`0Q;_W#C-D1<WT''YVR(HF\Y]`#(DGH#!X,ML_8*X"4\,?L":H
+MVID9DAF^A&0)R3"\:TT3</M^N6LN[_)Z=R&<^4XHV>+(F5W;)1J40E4X>2#'
+M\1]RY)PY>%/N6"ENN>(/(SOYW:NN[4&YL\`/7G$I]16-JF>;<H72;M2W=C=U
+MNU-"PPDJ1A1R<?<%)_W7<Y2Z8,L:GXJ$?=ABKPG/?DR\"]]RVO17^!JXR&S'
+MZ($7S5;U<[3Z[_NPMZYUD'[@VN;:=&H["V+N65..\-IR\:A.OVJK[>+(/Z'H
+3]4S^3R/20`@HD+%V_NJ_?N9DIP``
+EOT
+
+'ZapfDingbats' => <<'EOT',
+M>)RMD#M+`T$4A>>>TZ3TD4V,51K!3CO!!R$B@LTV%M:2*BFUL1!+"19:F2)9
+MB"AIM)`$B6D$14%,D11:^@,DJ(46NT8$#_X"0>?CFP<S<^?.=>YOS1+L\$H^
+MH$N/"2;1X"5/,,85[K$FZ^S@G3[Z^,`,:OA$A!!O]HIQI)#%&8<8%PFF.,I)
+M3BG.DOJLYAE6\(1[O&AW!.>,T6D,<8T;'.."TYS0:4_K4[105Z1AW#')09G7
+M>WT1(N2FB'/`FF['/*M:T8H($"C_;3$GXN)+E*WL>JYGOOF_JP`>D4::NZCH
+M7Q%C6$83:S\_^D^VN,C(VGAF($NL\D#,,\]9!F*?ASRR+M>Y('+,J1XM%IQC
+405DU2*[*#=[*C&Y5V6;I&TT<5J(`
 EOT
 );
 }

@@ -4,7 +4,8 @@ use Text::PDF::Utils;
 use Text::PDF::Page;
 use Getopt::Std;
 
-$version = "1.001";     # MJPH  30-NOV-1999     Original
+$version = "1.002";     # MJPH  10-DEC-1999     Fix page counts for pages objs.
+# $version = "1.001";     # MJPH  30-NOV-1999     Original
 
 getopts("b:h:p:qrs:");
 
@@ -46,9 +47,6 @@ proc_pages($pgs, 0);                        # count recursively through and inse
 if ($opt_b != -1 || $newpage->find_prop('MediaBox') eq "")
 { $newpage->bbox(@pbox); }
 
-$pgs->{'Count'} = PDFNum($pgcount + 1);     # update number of pages
-$p->out_obj($pgs, $pgcount);
-
 $p->append_file;                            # update appended file
 
 
@@ -56,22 +54,14 @@ $p->append_file;                            # update appended file
 sub proc_pages
 {
     my ($pgs, $cur) = @_;
-    my ($pg, $pgref, $i, $poss);
+    my ($pg, $pgref, $i);
 
     foreach $pgref ($pgs->{'Kids'}->elementsof)
     {
         print STDERR "." unless $opt_q;
         $pg = $p->read_obj($pgref);
         if ($pg->{'Type'}->val =~ m/^Pages$/oi)
-        {
-            $poss = 1 if ($cur <= $opt_p);
-            $cur = proc_pages($pg, $cur);
-            if ($poss && $cur >= $opt_p)
-            {
-                $pg->{'Count'} = PDFNum($pg->{'Count'}->val + 1);
-                $p->out_obj($pg);
-            }
-        }
+        { $cur = proc_pages($pg, $cur); }
         else
         {
             $cur++;

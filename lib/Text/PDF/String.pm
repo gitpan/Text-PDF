@@ -52,6 +52,7 @@ sub from_pdf
 
     bless $self, $class;
     $self->{'val'} = $self->convert($str);
+    $self->{' realised'} = 1;
     return $self;
 }
 
@@ -70,6 +71,7 @@ sub new
 
     bless $self, $class;
     $self->{'val'} = $str;
+    $self->{' realised'} = 1;
     return $self;
 }
 

@@ -1,4 +1,5 @@
 MANIFEST
+Make.PM
 Makefile.PL
 examples/graph.pl
 lib/Text/PDF/Array.pm
@@ -17,7 +18,11 @@ lib/Text/PDF/TTFont.pm
 lib/Text/PDF/TTFont0.pm
 lib/Text/PDF/Utils.pm
 lib/Text/PDF/changes
+pmake.bat
 readme.txt
+scripts/pdfaddobj.plx
 scripts/pdfaddpg.plx
 scripts/pdfbklt.plx
+scripts/pdfgetobj.plx
 scripts/pdfrevert.plx
+scripts/pdfstamp.plx

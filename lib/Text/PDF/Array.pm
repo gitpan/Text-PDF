@@ -35,6 +35,7 @@ sub new
     my ($self);
 
     $self->{' val'} = [@vals];
+    $self->{' realised'} = 1;
     bless $self, $class;
 }
 
