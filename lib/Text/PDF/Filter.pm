@@ -81,8 +81,8 @@ sub outfilt
 
     if ($self->{'outcache'} ne "")
     {
-        $str = $self->{'cache'} . $str;
-        $self->{'cache'} = "";
+        $str = $self->{'outcache'} . $str;
+        $self->{'outcache'} = "";
     }
     for ($i = 0; $i < length($str); $i += 4)
     {
@@ -128,7 +128,7 @@ sub infilt
             $res .= pack("N", 0);
             next;
         }
-        elsif ($isend && substr($str, $i, 6) =~ m/^(.{2,4})\-\>$/o)
+        elsif ($isend && substr($str, $i, 6) =~ m/^(.{2,4})\~\>$/o)
         {
             $num = 5 - length($1);
             @c = unpack("C5", $1 . ("u" x (4 - $num)));     # pad with 84 to sort out rounding

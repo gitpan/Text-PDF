@@ -140,7 +140,8 @@ use Text::PDF::Number;
 use Text::PDF::Objind;
 use Text::PDF::String;
 
-$VERSION = "0.18";      # MJPH   1-DEC-2001     add encryption hooks
+$VERSION = "0.19";      # MJPH   5-FEB-2002     fix hex keys and ASCII85 filter
+#$VERSION = "0.18";      # MJPH   1-DEC-2001     add encryption hooks
 #$VERSION = "0.17";      # GST   18-JUL-2001     Handle \) in strings and tidy up endobj handling, no uninitialized warnings
 #$VERSION = "0.16";      # GST   18-JUL-2001     Major performance tweaks
 #$VERSION = "0.15";      # GST   30-MAY-2001     Memory leaks fixed
@@ -243,9 +244,9 @@ sub open
     $fh->seek(0, 2);            # go to end of file
     $end = $fh->tell();
     $self->{' epos'} = $end;
-    $fh->seek($end - 40, 0);
-    $fh->read($buf, 40);
-    if ($buf !~ m/startxref$cr([0-9]+)$cr\%\%eof/oi)
+    $fh->seek($end - 1024, 0);
+    $fh->read($buf, 1024);
+    if ($buf !~ m/startxref$cr([0-9]+)$cr\%\%eof.*?$/oi)
     { die "Malformed PDF file $fname"; }
     $xpos = $1;
     
@@ -485,11 +486,12 @@ sub readval
         $res = PDFDict();
         while ($str !~ m/^\>\>$cr?/o)
         {
-            if ($str =~ m|^/([a-zA-Z0-9+\-!\"\$\&\'\*\,\.\:\;\=\?\@\\\^\_\`\|\~]+)$cr?(.*?)$|so)
+            if ($str =~ m|^/([a-zA-Z0-9+\-!\"\$\&\'\#\*\,\.\:\;\=\?\@\\\^\_\`\|\~]+)$cr?(.*?)$|so)
             {
                 $k = $1;
                 $str = $2;
 #                $key = PDFName($k);
+                $k =~ s/\#([0-9A-F][0-9A-F])/chr(hex($1))/ge;   # thanks to rlandrum@capitoladvantage.com
                 ($value, $str) = $self->readval($str, %opts);
                 $res->{$k} = $value;
             } elsif ($str =~ m/^$cr(.*?)$/so)
@@ -557,7 +559,7 @@ sub readval
         }
         $str = update($fh, $str);       # thanks to kundrat@kundrat.sk
         $str =~ s/^endobj$cr//o;
-    } elsif ($str =~ m{^/([a-zA-Z0-9+\-!\"\$\&\'\*\,\.\:\;\=\?\@\\\^\_\`\|\~]+)$cr?(.*?)$}so)        # name
+    } elsif ($str =~ m{^/([a-zA-Z0-9+\-!\"\$\&\'\#\*\,\.\:\;\=\?\@\\\^\_\`\|\~]+)$cr?(.*?)$}so)        # name
     {
         # " <- Fix colourization
         $value = $1;

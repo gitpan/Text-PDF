@@ -49,12 +49,9 @@ no warnings qw(uninitialized);
 
 # protected keys during emptying and copying, etc.
 
-BEGIN
-{
-    @inst = qw(parent objnum objgen isfree nextfree uid realised);
-    map {$inst{" $_"} = 1} @inst;
-    $uidc = "pdfuid000";
-}
+@inst = qw(parent objnum objgen isfree nextfree uid realised);
+map {$inst{" $_"} = 1} @inst;
+$uidc = "pdfuid000";
 
 
 =head2 Text::PDF::Objind->new()

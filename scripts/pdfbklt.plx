@@ -2,7 +2,8 @@ use Text::PDF::File;
 use Text::PDF::Utils;
 use Getopt::Std;
 
-$version = "1.502";     # MJPH  18-JUN-2001     Add support for -p4s
+$version = "1.503";     # MJPH  19-FEB-2002     Fix -p1 positioning (again!)
+# $version = "1.502";     # MJPH  18-JUN-2001     Add support for -p4s
 # $version = "1.501";     # MJPH   2-MAY-2001     Correct positioning of -s;;; type pages
 # $version = "1.500";     # MJPH  26-JUL-2000     Correct positioning in some cases and add landscape sizes
 # $version = "1.100";     # MJPH   3-AUG-1998     Support new PDF library
@@ -163,7 +164,7 @@ sub merge_pages
         $is = 1;
         if ($opt_s =~ m/^([0-9]+);([0-9]+);([0-9]+);([0-9]+)/o)
         { @prbox = ($1, $2, $3, $4); }
-        elsif ($opt_s =~ m/^([0-9])(.?)(.?)/o)
+        elsif ($opt_s =~ m/^([0-9])(.?)(.?)$/o)
         {
             $is = $1;
             $rl = lc($2);
@@ -179,6 +180,8 @@ sub merge_pages
             elsif ($is == 4)
             { $prbox[0] = $prbox[2] - (($prbox[2] - $prbox[0]) * 2 / $is); }
         }
+        elsif ($opt_s)
+        { die "Illegal -s value of $opt_s"; }
         $id = join(',', @prbox) . ",$opt_p";
         if (!defined $scache{$id})
         {
@@ -202,8 +205,8 @@ sub merge_pages
                 
                 $slist[0] = cm($xs, 0, 0, $ys,
 #                        $pbox[0] - ($xs * $prbox[0]), $pbox[1] - ($ys * $prbox[1]));
-                        .5 * ($pbox[2] - $xs * ($prbox[2] - $prbox[0])) + $pbox[0],
-                        .5 * ($pbox[3] - $ys * ($prbox[3] - $prbox[0])) + $pbox[1]);
+                        .5 * ($pbox[2] + $pbox[0] - $xs * ($prbox[2] + $prbox[0])),
+                        .5 * ($pbox[3] + $pbox[1] - $ys * ($prbox[3] + $prbox[1])));
             } elsif ($opt_p == 1)                   # landscape on portrait to portrait
             {
                 $slist[0] = cm(0, -$scale * $ys, $xs / $scale, 0,
