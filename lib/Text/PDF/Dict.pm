@@ -76,6 +76,7 @@ sub outobjdeep
         {
             $self->{'Length'} = Text::PDF::Number->new(0) unless (defined $self->{'Length'});
             $pdf->new_obj($self->{'Length'}) unless ($self->{'Length'}->is_obj($pdf));
+            $pdf->out_obj($self->{'Length'});
         } else
         { $self->{'Length'} = Text::PDF::Number->new(length($self->{' stream'}) + 1); }
     }
@@ -93,7 +94,7 @@ sub outobjdeep
     }
     while (($key, $val) = each %{$self})
     {
-        next if ($key =~ m/^\s/oi || $specs{$key});
+        next if ($key =~ m/^[\s\-]/oi || $specs{$key});
         next if $val eq "";
         $key =~ s|([\000-\020%()\[\]{}<>#/])|"#".sprintf("%02X", ord($1))|oige;
         $fh->print("/$key ");

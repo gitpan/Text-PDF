@@ -1,5 +1,4 @@
-#line 15
-use PDF::File;
+use Text::PDF::File;
 use Getopt::Std;
 
 getopts("g:m:n:");
@@ -17,22 +16,21 @@ Adds the given file as object number given by -n to pdf_file.
 EOT
 }
 
-$f = PDF::File->open($ARGV[0], 1) || "Can't open $ARGV[0]";
-$res = PDF::Objind->new($f, $opt_n, $opt_g);
-$res = $f->read_obj($res);
+$f = Text::PDF::File->open($ARGV[0], 1) || "Can't open $ARGV[0]";
+$res = $f->read_objnum($opt_n, $opt_g);
 
 open(INFILE, $ARGV[1]) || die "Can't read $ARGV[1]";
 binmode(INFILE);
 $res->{' stream'} = "";
 while (read(INFILE, $dat, 4096))
 { $res->{' stream'} .= $dat; }
-$res->{'Length1'} = PDF::Number->new($f, length($res->{' stream'}));
+delete $res->{' nofilt'};
+$res->{'Length1'}
 $f->out_obj($res);
 
 if (defined $opt_m)
 {
-    $mres = PDF::Objind->new($f, $opt_m, 0);
-    $mres = $f->read_obj($mres);
+    $mres = $f->read_objnum($opt_m, 0);
     $mres->{'FontFile2'} = $res;
     $f->out_obj($mres);
 }

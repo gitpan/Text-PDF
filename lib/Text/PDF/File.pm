@@ -138,7 +138,8 @@ use Text::PDF::Number;
 use Text::PDF::Objind;
 use Text::PDF::String;
 
-$VERSION = "0.13";      # MJPH  23-MAR-2001     General bug fix release
+$VERSION = "0.14";      # MJPH   2-MAY-2001     More little bug fixes, added read_objnum
+#$VERSION = "0.13";      # MJPH  23-MAR-2001     General bug fix release
 #$VERSION = "0.12";      # MJPH  29-JUL-2000     Add font subsetting, random page insertion
 #$VERSION = "0.11";      # MJPH  18-JUL-2000     Add pdfstamp.plx and more debugging
 #$VERSION = "0.10";	     # MJPH	 27-JUN-2000     Tidy up some bugs - names
@@ -212,7 +213,10 @@ sub open
 
     $self = $class->_new;
     if (ref $fname)
-    { $self->{' INFILE'} = $fname; }
+    {
+        $self->{' INFILE'} = $fname;
+        $fh = $fname;
+    }
     else
     {
         $fh = IO::File->new(($update ? "+" : "") . "<$fname") || return undef;
@@ -226,8 +230,8 @@ sub open
         }
     }
     $fh->read($buf, 255);
-    if ($buf !~ m/^\%pdf\-1\.[0-3]\s*$cr/moi)
-    { die "$fname not a PDF file version 1.0-1.3"; }
+    if ($buf !~ m/^\%pdf\-1\.[0-4]\s*$cr/moi)
+    { die "$fname not a PDF file version 1.0-1.4"; }
 
     $fh->seek(0, 2);            # go to end of file
     $end = $fh->tell();
@@ -267,7 +271,7 @@ sub append_file
     $tdict->{'Size'} = $self->{'Size'};
 
 # added v0.09
-    foreach $t (grep ($_ !~ m/^\s/oi, keys %$self))
+    foreach $t (grep ($_ !~ m/^[\s\-]/oi, keys %$self))
     { $tdict->{$t} = $self->{$t} unless defined $tdict->{$t}; }
 
     $fh = $self->{' INFILE'};
@@ -347,7 +351,7 @@ sub close_file
     $tdict->{'Prev'} = PDFNum($self->{' loc'}) if ($self->{' loc'});
     if ($self->{' update'})
     {
-        foreach $t (grep ($_ !~ m/^\s/oi, keys %$self))
+        foreach $t (grep ($_ !~ m/^[\s\-]/oi, keys %$self))
         { $tdict->{$t} = $self->{$t} unless defined $tdict->{$t}; }
 
         $fh = $self->{' INFILE'};
@@ -379,25 +383,24 @@ sub readval
     my ($res, $key, $value, $k);
 
     $str = update($fh, $str);
-    if ($str =~ m/^\<\<\s*$cr?/oi)                                      # dictionary
+    if ($str =~ m/^\<\<\s*$cr?/oi)                            # dictionary
     {
         $str = $';
         $str = update($fh, $str);
         $res = PDFDict();
         while ($str !~ m/^\>\>$cr?/oi)
         {
-            $str = update($fh, $str);
             if ($str =~ m|^/(\w+)$cr?|oi)
             {
                 $k = $1; $str = $';
 #                $key = PDFName($k);
                 ($value, $str) = $self->readval($str);
                 $res->{$k} = $value;
-            } else
+            } elsif ($str =~ m/^$cr/oi)                 
             {
-                $str =~ m/$cr/oi;
                 $str = $';
             }
+        $str = update($fh, $str);                           # thanks gareth.jones@stud.man.ac.uk
         }
         $str =~ s/^\>\>$cr?//oi;
         $str = update($fh, $str);
@@ -521,13 +524,29 @@ sub read_obj
     my ($loc, $res, $str, $oldloc);
 
 #    return ($objind) if $self->{' objects'}{$objind->uid};
-    $loc = $self->locate_obj($objind->{' objnum'}, $objind->{' objgen'});
+    $res = $self->read_objnum($objind->{' objnum'}, $objind->{' objgen'}) || return undef;
+    $objind->merge($res) unless ($objind eq $res);
+    return $objind;
+}
+
+
+=head2 $ref = $p->read_objnum($num, $gen, %opts)
+
+Returns a fully read object of given number and generation in this file
+
+=cut
+
+sub read_objnum
+{
+    my ($self, $num, $gen, %opts) = @_;
+    my ($res, $loc, $str, $oldloc);
+
+    $loc = $self->locate_obj($num, $gen) || return undef;
     $oldloc = $self->{' INFILE'}->tell;
     $self->{' INFILE'}->seek($loc, 0);
     ($res, $str) = $self->readval("", %opts);
     $self->{' INFILE'}->seek($oldloc, 0);
-    $objind->merge($res);
-    return $objind;
+    $res;
 }
 
 

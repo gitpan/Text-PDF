@@ -67,7 +67,7 @@ sub new
     my ($class) = @_;
     my ($self) = {};
 
-    bless $self, $class;
+    bless $self, ref $class || $class;
 }
 
 

@@ -1,9 +1,9 @@
-
 use Text::PDF::File;
 use Text::PDF::Utils;
 use Getopt::Std;
 
-$version = "1.500";     # MJPH  26-JUL-2000     Correct positioning in some cases and add landscape sizes
+$version = "1.501";     # MJPH   2-MAY-2001     Correct positioning of -s;;; type pages
+# $version = "1.500";     # MJPH  26-JUL-2000     Correct positioning in some cases and add landscape sizes
 
 
 # $version = "1.100";     # MJPH   3-AUG-1998     Support new PDF library
@@ -74,7 +74,7 @@ $pcount = 0;
 proc_pages($pgs);
 
 $opt_p = 2 unless defined $opt_p;
-$opt_r = !$opt_r if (($opt_p == 2 && $opt_s !~ /2/o) || ($opt_p != 2 && $opt_s =~ /2/o));
+$opt_r = !$opt_r if (($opt_p == 2 && $opt_s !~ /^2[rlt]*$/oi) || ($opt_p != 2 && $opt_s =~ /^2[rlt]*$/oi));
 
 if ($opt_b =~ m/^([0-9]+)\;([0-9]+)/oi)
 { @pbox = (0, 0, $1, $2); }
@@ -160,6 +160,7 @@ sub merge_pages
         @prbox = ();
         foreach $n ($pr[$j]->find_prop('MediaBox')->elementsof)
         { push(@prbox, $n->val); }
+        $is = 1;
         if ($opt_s =~ m/^([0-9]+);([0-9]+);([0-9]+);([0-9]+)/o)
         { @prbox = ($1, $2, $3, $4); }
         elsif ($opt_s =~ m/^([0-9])(.?)(.?)/o)
@@ -177,8 +178,7 @@ sub merge_pages
             { $prbox[2] = $prbox[0] + (($prbox[2] - $prbox[0]) * 2 / $is); }
             elsif ($is == 4)
             { $prbox[0] = $prbox[2] - (($prbox[2] - $prbox[0]) * 2 / $is); }
-        } else
-        { $is = 1; }
+        }
         $id = join(',', @prbox) . ",$opt_p";
         if (!defined $scache{$id})
         {
@@ -211,13 +211,13 @@ sub merge_pages
             } elsif ($opt_p == 2 && $is != 2)       # portrait source on portrait
             {
                 @scalestr = (0, 0.5 * $ys * $scale, -$xs / $scale, 0,
-                        0.5 * ($xs * ($prbox[3] - $prbox[1]) / $scale + $pbox[2]));
+                        0.5 * ($xs * ($prbox[3] + $prbox[1]) / $scale + $pbox[2]));
                 $slist[0] = cm(@scalestr,
 #                        0.5 * (-$ys * $scale * $prbox[0] + $pbox[1] + $pbox[3]));
-                         .25 * (3 * ($pbox[1] + $pbox[3]) - $ys * $scale * ($prbox[2] - $prbox[0])));
+                         .25 * (3 * ($pbox[1] + $pbox[3]) - $ys * $scale * ($prbox[2] + $prbox[0])));
                 $slist[1] = cm(@scalestr,
 #                        -0.5 * $ys * $scale * $prbox[0] + $pbox[1]);
-                         .25 * (3 * $pbox[1] + $pbox[3] - $ys * $scale * ($prbox[2] - $prbox[0])));
+                         .25 * (3 * $pbox[1] + $pbox[3] - $ys * $scale * ($prbox[2] + $prbox[0])));
             } elsif ($opt_p == 2)                   # double page landscape on portrait
             {
                 @scalestr = ($xs, 0, 0, 0.5 * $ys, .5 * ($pbox[2] - $xs * ($prbox[2] - $prbox[0])));
@@ -377,4 +377,5 @@ sub cm
     $res->{' stream'} = "$a[0] $a[1] $a[2] $a[3] $a[4] $a[5] cm";
     $res;
 }
+
 

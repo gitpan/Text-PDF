@@ -241,17 +241,23 @@ sub add_font
     my ($self, $font, $pdf) = @_;
     my ($name) = $font->{'Name'}->val;
     my ($dict) = $self->find_prop('Resources');
+    my ($rdict);
 
     return $self if ($dict ne "" && defined $dict->{'Font'} && defined $dict->{'Font'}{$name});
     unless (defined $self->{'Resources'})
     {
-        $dict = $dict ne ""? $dict->copy($pdf) : PDFDict();
+        $dict = $dict ne "" ? $dict->copy($pdf) : PDFDict();
         $self->{'Resources'} = $dict;
     }
+    else
+    { $dict = $self->{'Resources'}; }
     $dict->{'Font'} = PDFDict() unless defined $self->{'Resources'}{'Font'};
-    $dict->{'Font'}{$name} = $font;
+    $rdict = $dict->{'Font'}->val;
+    $rdict->{$name} = $font unless ($rdict->{$name});
     if (ref $dict ne 'HASH' && $dict->is_obj($pdf))
     { $pdf->out_obj($dict); }
+    if (ref $rdict ne 'HASH' && $rdict->is_obj($pdf))
+    { $pdf->out_obj($rdict); }
     $self;
 }
 

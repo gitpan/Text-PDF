@@ -1,4 +1,3 @@
-#line 15
 use Text::PDF::File;
 use Text::PDF::SFont;
 use Text::PDF::Utils;
@@ -10,7 +9,7 @@ getopts('f:l:s:t:');
 unless (defined $ARGV[1] && -f $ARGV[0])
 {
     die <<'EOT';
-    addstr [-f font] [-l locx,locy] [-s size] infile string
+    pdfstamp [-f font] [-l locx,locy] [-s size] infile string
 Adds the given string to the infile .pdf file at the given location, font and
 size.
 

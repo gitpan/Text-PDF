@@ -1,5 +1,4 @@
-
-require Text::PDF::File;
+use Text::PDF::File;
 
 unless (defined $ARGV[0])
 {
@@ -47,3 +46,4 @@ if ($len != 0)
 {
     truncate($fd, $loc) || die "Can't truncate";
 }
+

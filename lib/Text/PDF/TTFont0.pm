@@ -225,6 +225,8 @@ sub outobjdeep
             else
             { $f->{'loca'}{glyphs}[$i] = undef; }
         }
+        for ( ; $i < $f->{'maxp'}{'numGlyphs'}; $i++)
+        { $f->{'loca'}{'glyphs'}[$i] = undef; }
     }
     $s->{' stream'} = "";
     $ffh = Text::PDF::TTIOString->new(\$s->{' stream'});
