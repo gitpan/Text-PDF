@@ -45,6 +45,7 @@ Holds a direct reference to the next free object in the free list.
 
 use strict;
 use vars qw(@inst %inst $uidc);
+no warnings qw(uninitialized);
 
 # protected keys during emptying and copying, etc.
 
@@ -224,7 +225,7 @@ This also means that all direct subclasses must subclass this method or loop for
 
 sub outobjdeep
 {
-    my ($self, $fh, $pdf) = @_;
+    my ($self, $fh, $pdf, %opts) = @_;
 
     $self->{' parent'}->read_obj($self)->outobjdeep($fh, $pdf) unless ($self->{' realised'});
 }
@@ -239,12 +240,12 @@ outobjdeep to output the contents of the object at this point.
 
 sub outobj
 {
-    my ($self, $fh, $pdf) = @_;
+    my ($self, $fh, $pdf, %opts) = @_;
 
     if (defined $pdf->{' objects'}{$self->uid})
     { $fh->printf("%d %d R", @{$pdf->{' objects'}{$self->uid}}[0..1]); }
     else
-    { $self->outobjdeep($fh, $pdf); }
+    { $self->outobjdeep($fh, $pdf, %opts); }
 }
 
 

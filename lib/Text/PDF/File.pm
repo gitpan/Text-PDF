@@ -125,6 +125,7 @@ is in PDF which contains the location of the previous cross-reference table.
 use strict;
 no strict "refs";
 use vars qw($cr %types $VERSION);
+no warnings qw(uninitialized);
 
 use IO::File;
 
@@ -139,7 +140,8 @@ use Text::PDF::Number;
 use Text::PDF::Objind;
 use Text::PDF::String;
 
-$VERSION = "0.16";      # GST   18-JUL-2001     Major performance tweaks
+$VERSION = "0.17";      # GST   18-JUL-2001     Handle \) in strings and tidy up endobj handling, no uninitialized warnings
+#$VERSION = "0.16";      # GST   18-JUL-2001     Major performance tweaks
 #$VERSION = "0.15";      # GST   30-MAY-2001     Memory leaks fixed
 #$VERSION = "0.14";      # MJPH   2-MAY-2001     More little bug fixes, added read_objnum
 #$VERSION = "0.13";      # MJPH  23-MAR-2001     General bug fix release
@@ -224,13 +226,14 @@ sub open
     {
         $fh = IO::File->new(($update ? "+" : "") . "<$fname") || return undef;
         $self->{' INFILE'} = $fh;
-        binmode $fh;
-        if ($update)
-        {
-            $self->{' update'} = 1;
-            $self->{' OUTFILE'} = $fh;
-            $self->{' fname'} = $fname;
-        }
+    }
+
+    binmode $fh;
+    if ($update)
+    {
+        $self->{' update'} = 1;
+        $self->{' OUTFILE'} = $fh;
+        $self->{' fname'} = $fname;
     }
     $fh->read($buf, 255);
     if ($buf !~ m/^\%pdf\-1\.[0-4]\s*$cr/moi)
@@ -239,8 +242,8 @@ sub open
     $fh->seek(0, 2);            # go to end of file
     $end = $fh->tell();
     $self->{' epos'} = $end;
-    $fh->seek($end - 32, 0);
-    $fh->read($buf, 32);
+    $fh->seek($end - 40, 0);
+    $fh->read($buf, 40);
     if ($buf !~ m/startxref$cr([0-9]+)$cr\%\%eof/oi)
     { die "Malformed PDF file $fname"; }
     $xpos = $1;
@@ -456,7 +459,7 @@ sub close_file
     $self;
 }
 
-=head2 ($value, $str) = $p->readval($str)
+=head2 ($value, $str) = $p->readval($str, %opts)
 
 Reads a PDF value from the current position in the file. If $str is too short
 then read some more from the current location in the file until the whole object
@@ -486,7 +489,7 @@ sub readval
                 $k = $1;
                 $str = $2;
 #                $key = PDFName($k);
-                ($value, $str) = $self->readval($str);
+                ($value, $str) = $self->readval($str, %opts);
                 $res->{$k} = $value;
             } elsif ($str =~ m/^$cr(.*?)$/so)
             {
@@ -542,7 +545,7 @@ sub readval
         $k = $1;
         $value = $2;
         $str = $3;
-        ($obj, $str) = $self->readval($str, %opts);
+        ($obj, $str) = $self->readval($str, %opts, 'objnum' => $k, 'objgen' => $value);
         if ($res = $self->test_obj($k, $value))
         { $res->merge($obj); }
         else
@@ -551,6 +554,8 @@ sub readval
             $self->add_obj($res, $k, $value);
             $res->{' realised'} = 1;
         }
+        $str = update($fh, $str);       # thanks to kundrat@kundrat.sk
+        $str =~ s/^endobj$cr//o;
     } elsif ($str =~ m{^/([a-zA-Z0-9+\-!\"\$\&\'\*\,\.\:\;\=\?\@\\\^\_\`\|\~]+)$cr?(.*?)$}so)        # name
     {
         # " <- Fix colourization
@@ -560,8 +565,8 @@ sub readval
     } elsif (0 == index( $str, '(' ))
     {
         $str =~ s/^\(//o;
-        $fh->read($str, 255, length($str)) while (0 > index( $str, ')' ));
-        ($value, $str) = ($str =~ /^(.*?)\)\s*$cr?(.*?)$/so);
+        $fh->read($str, 255, length($str)) while ($str !~ m/(?:[^\\]\)|^\))/o);     # thanks to kundrat@kundrat.sk
+        ($value, $str) = ($str =~ /^((?:\\.|[^)])*)\)\s*$cr?(.*?)$/so);
         $res = Text::PDF::String->from_pdf($value);
     } elsif (0 == index( $str, '<' ))                                          # hex-string
     {
@@ -611,7 +616,7 @@ sub read_obj
     my ($loc, $res, $str, $oldloc);
 
 #    return ($objind) if $self->{' objects'}{$objind->uid};
-    $res = $self->read_objnum($objind->{' objnum'}, $objind->{' objgen'}) || return undef;
+    $res = $self->read_objnum($objind->{' objnum'}, $objind->{' objgen'}, %opts) || return undef;
     $objind->merge($res) unless ($objind eq $res);
     return $objind;
 }
@@ -631,7 +636,7 @@ sub read_objnum
     $loc = $self->locate_obj($num, $gen) || return undef;
     $oldloc = $self->{' INFILE'}->tell;
     $self->{' INFILE'}->seek($loc, 0);
-    ($res, $str) = $self->readval('', %opts);
+    ($res, $str) = $self->readval('', %opts, 'objnum' => $num, 'objgen' => $gen);
     $self->{' INFILE'}->seek($oldloc, 0);
     $res;
 }
@@ -789,6 +794,7 @@ sub ship_out
 {
     my ($self, @objs) = @_;
     my ($n, $fh, $objind, $i, $j);
+    my ($objnum, $objgen);
 
     return unless defined($fh = $self->{' OUTFILE'});
     seek($fh, 0, 2);            # go to the end of the file
@@ -812,8 +818,9 @@ sub ship_out
         next if grep {$_ eq $objind} @{$self->{' free'}};
 
         $self->{' locs'}{$objind->uid} = $fh->tell;
-        $fh->printf("%d %d obj\n", @{$self->{' objects'}{$objind->uid}}[0..1]);
-        $objind->outobjdeep($fh, $self);
+        ($objnum, $objgen) = @{$self->{' objects'}{$objind->uid}}[0..1]
+        $fh->printf("%d %d obj\n", $objnum, $objgen);
+        $objind->outobjdeep($fh, $self, 'objnum' => $objnum, 'objgen' => $objgen);
         $fh->print("\nendobj\n");
 
         # Note that we've output this obj, not forgetting to update the cache
@@ -879,7 +886,7 @@ sub update
     $fh->read($str, 255, length($str)) while ($str !~ m/$cr/o);
     while ($str =~ /^\s*\%(.*?)$cr(.*?)$/so)
     {
-        $str = $1;
+        $str = $2;              # thanks to kundrat@kundrat.sk 
         $fh->read($str, 255, length($str)) while ($str !~ m/$cr/o);
     }
     $str;

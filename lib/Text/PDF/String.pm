@@ -11,6 +11,7 @@ that are basically stringlike (Number, Name, etc.)
 
 use strict;
 use vars qw(@ISA %trans %out_trans);
+no warnings qw(uninitialized);
 
 use Text::PDF::Objind;
 @ISA = qw(Text::PDF::Objind);
@@ -87,9 +88,9 @@ sub convert
     my ($self, $str) = @_;
 
     $str =~ s/\\([nrtbf\\()])/$trans{$1}/ogi;
-    $str =~ s/\\([0-7]+)/oct($1)/oeg;
-    1 while $str =~ s/\<([0-9a-f]{2})/hex($1)."\<"/oige;
-    $str =~ s/\<([0-9a-f])\>/hex($1 . "0")/oige;
+    $str =~ s/\\([0-7]+)/chr(oct($1))/oeg;              # thanks to kundrat@kundrat.sk
+    1 while $str =~ s/\<([0-9a-f]{2})/chr(hex($1))."\<"/oige;
+    $str =~ s/\<([0-9a-f]?)\>/chr(hex($1."0"))/oige;
     $str =~ s/\<\>//og;
     return $str;
 }
@@ -135,7 +136,7 @@ Outputs the string in PDF format, complete with necessary conversions
 
 sub outobjdeep
 {
-    my ($self, $fh, $pdf) = @_;
+    my ($self, $fh, $pdf, %opts) = @_;
 
     $fh->print($self->as_pdf);
 }

@@ -2,6 +2,7 @@ package Text::PDF::Array;
 
 use strict;
 use vars qw(@ISA);
+no warnings qw(uninitialized);
 
 use Text::PDF::Objind;
 @ISA = qw(Text::PDF::Objind);
@@ -48,7 +49,7 @@ Outputs an array as a PDF array to the given filehandle.
 
 sub outobjdeep
 {
-    my ($self, $fh, $pdf) = @_;
+    my ($self, $fh, $pdf, %opts) = @_;
     my ($obj);
 
     $fh->print("[ ");

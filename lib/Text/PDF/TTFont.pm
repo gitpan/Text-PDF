@@ -22,6 +22,7 @@ to entries in the appropriate PDF dictionaries.
 
 use strict;
 use vars qw(@ISA @cp1252 $subcount);
+no warnings qw(uninitialized);
 
 use Text::PDF::Dict;
 use Text::PDF::Utils;
@@ -241,9 +242,9 @@ sub copy
 
 sub outobjdeep
 {
-    my ($self, $fh, $pdf, $passthru) = @_;
+    my ($self, $fh, $pdf, %opts) = @_;
     
-    return $self->SUPER::outobjdeep($fh, $pdf) if $passthru;
+    return $self->SUPER::outobjdeep($fh, $pdf) if defined $opts{'passthru'};
 
     my ($f) = $self->{' font'};
     my ($d) = $self->{'FontDescriptor'};
@@ -281,7 +282,7 @@ sub outobjdeep
         $s->{'Length1'} = PDFNum(length($s->{' stream'}));
     }
 
-    $self->SUPER::outobjdeep($fh, $pdf);
+    $self->SUPER::outobjdeep($fh, $pdf, %opts);
 }
 
 1;

@@ -6,6 +6,8 @@ use Getopt::Std;
 
 getopts('f:l:s:t:');
 
+$VERSION = 0.02;    #   MJPH    23-JUL-2001     Re-order to stamp on the top
+
 unless (defined $ARGV[1] && -f $ARGV[0])
 {
     die <<'EOT';
@@ -30,6 +32,11 @@ $opt_l = "0 0" unless $opt_l;
 $pdf = Text::PDF::File->open($ARGV[0], 1);
 $root = $pdf->{'Root'}->realise;
 $pgs = $root->{'Pages'}->realise;
+
+$fpgins = PDFDict(); $pdf->new_obj($fpgins);
+$spgins = PDFDict(); $pdf->new_obj($spgins);
+$fpgins->{' stream'} = "q";
+$spgins->{' stream'} = "Q";
 
 @pglist = proc_pages($pdf, $pgs);
 
@@ -59,7 +66,7 @@ $pdf->new_obj($stream);
 foreach $p (@pglist)
 {
     $p->add_font($font, $pdf);
-    $p->{Contents} = PDFArray($stream, $p->{Contents}->elementsof);
+    $p->{Contents} = PDFArray($fpgins, $p->{Contents}->elementsof, $spgins, $stream);
     $pdf->out_obj($p);
 }
 

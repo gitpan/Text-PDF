@@ -2,10 +2,9 @@ use Text::PDF::File;
 use Text::PDF::Utils;
 use Getopt::Std;
 
-$version = "1.501";     # MJPH   2-MAY-2001     Correct positioning of -s;;; type pages
+$version = "1.502";     # MJPH  18-JUN-2001     Add support for -p4s
+# $version = "1.501";     # MJPH   2-MAY-2001     Correct positioning of -s;;; type pages
 # $version = "1.500";     # MJPH  26-JUL-2000     Correct positioning in some cases and add landscape sizes
-
-
 # $version = "1.100";     # MJPH   3-AUG-1998     Support new PDF library
 # $version = "1.101";     # MJPH  13-OCT-1998     Debug resource merging not being output
 # $version = "1.200";     # MJPH   6-NOV-1998     Merging external resources and change -r
@@ -32,6 +31,7 @@ modifications at the end.
             or gives the dimensions of the page in pts (x;y) or A4,ltr,lgl,A5
   -l        Flag to indicate linear scaling
   -p num    Specifies the number of pages on the output page (1, 2, 4) [2]
+            If 4, can be 4s to flip on short edge
   -q        Quiet (no on screen messages)
   -r        Rotates the output (-p 2 rotates automatically, -r rotates back)
   -s size   Specifies the the location of the actual text on a page:
@@ -231,23 +231,43 @@ sub merge_pages
                 $a = .5 * $xs; $b = .5 * $ys;
                 $slist[0] = cm($a, 0, 0, $b,
                         -$a * $prbox[0] + 0.5 * ($pbox[0] + $pbox[2]), -$b * $prbox[1] + $pbox[1]);
-                $slist[1] = cm(-$a, 0, 0, -$b,
-                        $a * $prbox[0] + $pbox[2], $b * $prbox[1] + $pbox[3]);
                 $slist[2] = cm(-$a, 0, 0, -$b,
                         $a * $prbox[0] + 0.5 * ($pbox[0] + $pbox[2]), $b * $prbox[1] + $pbox[3]);
-                $slist[3] = cm($a, 0, 0, $b,
-                        -$a * $prbox[0] + $pbox[0], -$b * $prbox[1] + $prbox[1]);
+                if ($opt_p =~ /s/o)
+                {
+                    $slist[1] = cm($a, 0, 0, $b,
+                            -$a * $prbox[0] + 0.5 * ($pbox[0] + $pbox[2]), -$b * $prbox[1] + 0.5 * ($pbox[1] + $pbox[3]));
+                    $slist[3] = cm(-$a, 0, 0, -$b,
+                            $a * $prbox[0] + 0.5 * ($pbox[0] + $pbox[2]), $b * $prbox[1] + 0.5 * ($pbox[1] + $pbox[3]));
+                }
+                else
+                {
+                    $slist[1] = cm(-$a, 0, 0, -$b,
+                            $a * $prbox[0] + $pbox[2], $b * $prbox[1] + $pbox[3]);
+                    $slist[3] = cm($a, 0, 0, $b,
+                            -$a * $prbox[0] + $pbox[0], -$b * $prbox[1] + $pbox[1]);
+                }
             } elsif ($opt_p == 4)
             {
                 $a = .5 * $ys * $scale; $b = .5 * $xs / $scale;
                 $slist[0] = cm(0, -$a, $b, 0,
                         -$b * $prbox[1] + 0.5 * ($pbox[0] + $pbox[2]), $a * $prbox[2] + $pbox[1]);
-                $slist[1] = cm(0, $a, -$b, 0,
-                        $b * $prbox[1] + $pbox[2], -$a * $prbox[2] + $pbox[3]);
                 $slist[2] = cm(0, $a, -$b, 0,
                         $b * $prbox[1] + 0.5 * ($pbox[0] + $pbox[2]), -$a * $prbox[2] + $pbox[3]);
-                $slist[3] = cm(0, -$a, $b, 0,
-                        -$b * $prbox[1] + $pbox[0], $a * $prbox[2] + $pbox[1]);
+                if ($opt_p =~ /s/o)
+                {
+                    $slist[1] = cm(0, -$a, $b, 0,
+                            -$b * $prbox[1] + 0.5 * ($pbox[0] + $pbox[2]), $a * $prbox[2] + 0.5 * ($pbox[1] + $pbox[3]));
+                    $slist[3] = cm(0, $a, -$b, 0,
+                            $b * $prbox[1] + 0.5 * ($pbox[0] + $pbox[2]), -$a * $prbox[2] + 0.5 * ($pbox[1] + $pbox[3]));
+                }
+                else
+                {
+                    $slist[1] = cm(0, $a, -$b, 0,
+                            $b * $prbox[1] + $pbox[2], -$a * $prbox[2] + $pbox[3]);
+                    $slist[3] = cm(0, -$a, $b, 0,
+                            -$b * $prbox[1] + $pbox[0], $a * $prbox[2] + $pbox[1]);
+                }
             }
             $scache{$id} = [@slist];
         }
@@ -377,5 +397,3 @@ sub cm
     $res->{' stream'} = "$a[0] $a[1] $a[2] $a[3] $a[4] $a[5] cm";
     $res;
 }
-
-

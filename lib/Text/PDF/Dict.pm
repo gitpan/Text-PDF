@@ -2,6 +2,7 @@ package Text::PDF::Dict;
 
 use strict;
 use vars qw(@ISA $mincache $tempbase);
+no warnings qw(uninitialized);
 
 use Text::PDF::Objind;
 @ISA = qw(Text::PDF::Objind);
@@ -66,7 +67,7 @@ stream's dictionary.
 
 sub outobjdeep
 {
-    my ($self, $fh, $pdf) = @_;
+    my ($self, $fh, $pdf, %opts) = @_;
     my ($key, $val, $f, @filts);
     my ($loc, $str, %specs);
 
@@ -91,7 +92,7 @@ sub outobjdeep
         if (defined $self->{$_})
         {
             $fh->print("/$_ ");
-            $self->{$_}->outobj($fh, $pdf);
+            $self->{$_}->outobj($fh, $pdf, %opts);
             $fh->print("\n");
         }
     }
@@ -101,7 +102,7 @@ sub outobjdeep
         next if ($val eq '');
         $key =~ s|([\000-\020%()\[\]{}<>#/])|"#".sprintf("%02X", ord($1))|oge;
         $fh->print("/$key ");
-        $val->outobj($fh, $pdf);
+        $val->outobj($fh, $pdf, %opts);
         $fh->print("\n");
     }
     $fh->print('>>');

@@ -65,6 +65,7 @@ package Text::PDF::ASCII85Decode;
 use strict;
 use vars qw(@ISA);
 @ISA = qw(Text::PDF::Filter);
+no warnings qw(uninitialized);
 
 =head1 NAME
 
@@ -154,6 +155,7 @@ package Text::PDF::RunLengthDecode;
 use strict;
 use vars qw(@ISA);
 @ISA = qw(Text::PDF::Filter);
+no warnings qw(uninitialized);
 
 =head1 NAME
 
@@ -243,6 +245,7 @@ package Text::PDF::ASCIIHexDecode;
 use strict;
 use vars qw(@ISA);
 @ISA = qw(Text::PDF::Filter);
+no warnings qw(uninitialized);
 
 =head1 NAME
 
@@ -315,6 +318,7 @@ package Text::PDF::LZWDecode;
 use vars qw(@ISA @basedict);
 @ISA = qw(Text::PDF::FlateDecode);
 @basedict = map {pack("C", $_)} (0 .. 255, 0, 0);
+no warnings qw(uninitialized);
 
 sub new
 {
