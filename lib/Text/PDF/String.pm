@@ -87,9 +87,9 @@ sub convert
 {
     my ($self, $str) = @_;
 
-    $str =~ s/\\([nrtbf\\()])/$trans{$1}/ogi;
-    $str =~ s/\\([0-7]+)/chr(oct($1))/oeg;              # thanks to kundrat@kundrat.sk
-    1 while $str =~ s/\<([0-9a-f]{2})/chr(hex($1))."\<"/oige;
+    $str =~ s/\\([nrtbf\\()]|[0-7]+)/defined $trans{$1} ? $trans{$1} : chr(oct($1))/oegi;
+#    $str =~ s/\\([0-7]+)/chr(oct($1))/oeg;              # thanks to kundrat@kundrat.sk
+    1 while $str =~ s/\<([0-9a-f]{2})[\r\n]*/chr(hex($1))."\<"/oige;
     $str =~ s/\<([0-9a-f]?)\>/chr(hex($1."0"))/oige;
     $str =~ s/\<\>//og;
     return $str;
@@ -141,3 +141,20 @@ sub outobjdeep
     $fh->print($self->as_pdf ($pdf));
 }
 
+
+=head2 $s->copy($inpdf, $res, $unique, $outpdf, %opts)
+
+Copies an object. See Text::PDF::Objind::Copy() for details
+
+=cut
+
+sub copy
+{
+    my ($self, $inpdf, $res, $unique, $outpdf, %opts) = @_;
+    my ($i);
+
+    $res = $self->SUPER::copy($inpdf, $res, $unique, $outpdf, %opts);
+    $res->{'val'} = $self->{'val'};
+    $res->{' realised'} = 1;
+    $res;
+}

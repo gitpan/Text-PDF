@@ -80,8 +80,8 @@ encode certain characters in hex if the version is greater than 1.1.
 sub string_to_name ($;$)
 {
     my ($str, $pdf) = @_;
-    if (!(defined ($pdf) && $pdf->{' version'} < 2))
-      { $str =~ s|([\001-\040\177-\377%()\[\]{}<>#/])|"#".sprintf("%02X", ord($1))|oge; }
+    if (!defined($pdf) || (defined $pdf->{' version'} && $pdf->{' version'} >= 2))
+    { $str =~ s|([\001-\040\177-\377%()\[\]{}<>#/])|"#".sprintf("%02X", ord($1))|oge; }
     return $str;
 }
 
@@ -98,8 +98,8 @@ sub name_to_string ($;$)
     my ($str, $pdf) = @_;
     $str =~ s|^/||o;
 
-    if (!(defined ($pdf) && $pdf->{' version'} < 2))
-      { $str =~ s/#([0-9a-f]{2})/chr(hex($1))/oige; }
+    if (!defined($pdf) || (defined $pdf->{' version'} && $pdf->{' version'} >= 2))
+    { $str =~ s/#([0-9a-f]{2})/chr(hex($1))/oige; }
     return $str;
 }
 

@@ -55,7 +55,7 @@ sub outobjdeep
     $fh->print("[ ");
     foreach $obj (@{$self->{' val'}})
     {
-        $obj->outobj($fh, $pdf);
+        $obj->outobj($fh, $pdf, %opts);
         $fh->print(" ");
     }
     $fh->print("]");
@@ -116,27 +116,29 @@ sub val
 { $_[0]->{' val'}; }
 
 
-=head2 $a->copy($pdf)
+=head2 $d->copy($inpdf, $res, $unique, $outpdf, %opts)
 
-Copies the array with deep-copy on elements which are not full PDF objects
-with respect to a particular $pdf output context
+Copies an object. See Text::PDF::Objind::Copy() for details
 
 =cut
 
 sub copy
 {
-    my ($self, $pdf) = @_;
-    my ($res) = $self->SUPER::copy($pdf);
-    my ($e);
+    my ($self, $inpdf, $res, $unique, $outpdf, %opts) = @_;
+    my ($i, $path);
 
+    $res = $self->SUPER::copy($inpdf, $res, $unique, $outpdf, %opts);
     $res->{' val'} = [];
-    foreach $e (@{$self->{' val'}})
+    $path = delete $opts{'path'};
+    for ($i = 0; $i < scalar @{$self->{' val'}}; $i++)
     {
-        if (UNIVERSAL::can($e, "is_obj") && !$e->is_obj($pdf))
-        { push(@{$res->{' val'}}, $e->copy($pdf)); }
+        if (UNIVERSAL::can($self->{'val'}[$i], "is_obj") && !grep {"$path\[$i\]" =~ m|$_|} @{$opts{'clip'}})
+        { push (@{$res->{' val'}}, $self->{' val'}[$i]->realise->copy($inpdf, undef, $unique ? $unique + 1 : 0,
+                        $outpdf, %opts, 'path' => "$path\[$i\]")); }
         else
-        { push(@{$res->{' val'}}, $e); }
+        { push (@{$res->{' val'}}, $self->{' val'}[$i]); }
     }
+    $res->{' realised'} = 1;
     $res;
 }
 

@@ -49,7 +49,7 @@ use vars qw(@inst %inst $uidc);
 
 # protected keys during emptying and copying, etc.
 
-@inst = qw(parent objnum objgen isfree nextfree uid realised);
+@inst = qw(parent objnum objgen isfree nextfree uid);
 map {$inst{" $_"} = 1} @inst;
 $uidc = "pdfuid000";
 
@@ -224,7 +224,7 @@ sub empty
     my ($k);
 
     for $k (keys %$self)
-    { undef $self->{$k} unless $inst{$k}; }
+    { undef $self->{$k} unless $self->dont_copy($k); }
     $self;
 }
 
@@ -244,7 +244,7 @@ sub merge
     my ($k);
 
     for $k (keys %$other)
-    { $self->{$k} = $other->{$k} unless $inst{$k}; }
+    { $self->{$k} = $other->{$k} unless $self->dont_copy($k); }
     $self->{' realised'} = 1;
     bless $self, ref($other);
 }
@@ -262,43 +262,59 @@ sub is_obj
 { defined $_[1]->{' objects'}{$_[0]->uid}; }
 
 
-=head2 $r->copy($pdf, $res)
+=head2 $r->copy($inpdf, $res, $unique, $outpdf, %opts)
 
-Returns a new copy of this object. The object is assumed to be some kind
-of associative array and the copy is a deep copy for elements which are
-not PDF objects, according to $pdf, and shallow copy for those that are.
-Notice that calling C<copy> on an object forces at least a one level
-copy even if it is a PDF object. The returned object loses its PDF
-object status though.
+Returns a new copy of this object.
 
-If $res is defined then the copy goes into that object rather than creating a
-new one. It is up to the caller to bless $res, etc. Notice that elements from
-$self are not copied into $res if there is already an entry for them existing
-in $res.
+$inpdf gives the source pdf object for the object to be copied. $outpdf gives the
+target pdf for the object to be copied into. $outpdf may be undefined. $res may be
+defined in which case the object is copied into that object. $unique controls
+recursion. if $unique is non zero then new objects are always created and recursion
+always occurs. But each time recursion occurs, $unique is incremented. Thus is $unique
+starts with a negative value it is possible to stop the recursion at a certain depth. Of
+course for a positive value of $unique, recursion always occurs.
+
+If $unique is 0 then recursion only occurs if $outpdf is not the same as $inpdf. In this
+case, a cache is held in $outpdf to see whether a previous copy of the same object has
+been made. If so, then that previous copy is returned otherwise a new object is made and
+added to the cache and recursed into.  
+
+Objects that are full objects with their own id numbers are correspondingly full objects
+in the output pdf.
 
 =cut
 
 sub copy
 {
-    my ($self, $pdf, $res) = @_;
-    my ($k);
+    my ($self, $inpdf, $res, $unique, $outpdf, %opts) = @_;
+    my ($k, $o);
 
+    $outpdf = $inpdf unless $outpdf;
+    $self->realise;
     unless (defined $res)
     {
+        if ($outpdf eq $inpdf && !$unique)
+        { return $self; }
+        elsif (!$unique && defined $outpdf->{' copies'}{$self->uid})
+        { return $outpdf->{' copies'}{$self->uid}; }
+
         $res = {};
         bless $res, ref($self);
     }
-    foreach $k (keys %$self)
+
+    if ($self->is_obj($inpdf) && ($unique || ($outpdf ne $inpdf && !defined $outpdf->{' copies'}{$self->uid})))
     {
-        next if $inst{$k};
-        next if defined $res->{$k};
-        if (UNIVERSAL::can($self->{$k}, "is_obj") && !$self->{$k}->is_obj($pdf))
-        { $res->{$k} = $self->{$k}->copy($pdf); }
-        else
-        { $res->{$k} = $self->{$k}; }
+        $outpdf->new_obj($res);
+#        $outpdf->{' copies'}{$self->uid} = $res unless ($unique);
     }
+        
     $res;
 }
+
+
+
+sub dont_copy
+{ return $inst{$_[1]}; }
 
 1;
 

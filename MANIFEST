@@ -2,7 +2,6 @@ MANIFEST
 MANIFEST.SKIP
 Make.PM
 Makefile.PL
-alpha.zip
 examples/CD.CFG
 examples/call_conf.txt
 examples/graph.pl

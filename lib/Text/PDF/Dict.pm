@@ -102,7 +102,7 @@ sub outobjdeep
     {
         next if ($key =~ m/^[\s\-]/o || $specs{$key});
         next if ($val eq '');
-	$key = Text::PDF::Name::string_to_name ($key, $pdf);
+        $key = Text::PDF::Name::string_to_name ($key, $pdf);
         $fh->print("/$key ");
         $val->outobj($fh, $pdf, %opts);
         $fh->print("\n");
@@ -283,4 +283,35 @@ sub val
 { $_[0]; }
 
 
+=head2 $d->copy($inpdf, $res, $unique, $outpdf, %opts)
+
+Copies an object. See Text::PDF::Objind::Copy() for details
+
+=cut
+
+sub copy
+{
+    my ($self, $inpdf, $res, $unique, $outpdf, %opts) = @_;
+    my ($k, $path);
+
+    $res = $self->SUPER::copy($inpdf, $res, $unique, $outpdf, %opts);
+    $path = delete $opts{'path'};
+    foreach $k (keys %$self)
+    {
+        next if $self->dont_copy($k);
+        next if defined $res->{$k};
+        if (UNIVERSAL::can($self->{$k}, "is_obj"))
+        {
+            if (grep {"$path/$k" =~ m|$_|} @{$opts{'clip'}})
+            { $res->{$k} = $self->{$k}; }
+            else
+            { $res->{$k} = $self->{$k}->realise->copy($inpdf, undef, $unique ? $unique + 1 : 0,
+                        $outpdf, %opts, 'path' => "$path/$k"); }
+        }
+        else
+        { $res->{$k} = $self->{$k}; }
+    }
+    $res;
+}
+    
 

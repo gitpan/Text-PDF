@@ -143,7 +143,9 @@ use Text::PDF::Page;
 use Text::PDF::Pages;
 use Text::PDF::Null;
 
-$VERSION = "0.23";      # MJPH  14-AUG-2002     Fix MANIFEST
+$VERSION = "0.25";      # MJPH  20-JAN-2003     fix realised in read_obj x y R, fix Text::PDF::Pages::add_page
+#$VERSION = "0.24";      # MJPH  28-AUG-2002     out_obj may call new_obj
+#$VERSION = "0.23";      # MJPH  14-AUG-2002     Fix MANIFEST
 #$VERSION = "0.22";      # MJPH  26-JUL-2002     Add Text::PDF::File::copy, tidy up update(), sort out out_trailer
 #                                                Fix to not remove string final CRs when reading dictionaries
 #$VERSION = "0.21";      # GJ     8-JUN-2002     Tidy up regexps, add Text::PDF::Null
@@ -158,8 +160,8 @@ $VERSION = "0.23";      # MJPH  14-AUG-2002     Fix MANIFEST
 #$VERSION = "0.13";      # MJPH  23-MAR-2001     General bug fix release
 #$VERSION = "0.12";      # MJPH  29-JUL-2000     Add font subsetting, random page insertion
 #$VERSION = "0.11";      # MJPH  18-JUL-2000     Add pdfstamp.plx and more debugging
-#$VERSION = "0.10";	     # MJPH	 27-JUN-2000     Tidy up some bugs - names
-#$VERSION = "0.09";	     # MJPH	 31-MAR-2000     Copy trailer dictionary properly
+#$VERSION = "0.10";          # MJPH      27-JUN-2000     Tidy up some bugs - names
+#$VERSION = "0.09";          # MJPH      31-MAR-2000     Copy trailer dictionary properly
 #$VERSION = "0.08";      # MJPH  07-FEB-2000     Add null element
 #$VERSION = "0.07";      # MJPH  01-DEC-1999     Debug for pdfbklt
 #$VERSION = "0.06";      # MJPH  11-SEP-1999     Sort out unixisms
@@ -487,19 +489,19 @@ sub readval
 
         while ($str !~ m/^>>/o)
         {
-	    if ($str =~ s|^/($reg_char+)||o)
+            if ($str =~ s|^/($reg_char+)||o)
             {
-		$k = Text::PDF::Name::name_to_string ($1, $self);
+                $k = Text::PDF::Name::name_to_string ($1, $self);
                 ($value, $str) = $self->readval($str, %opts);
                 $res->{$k} = $value;
             }
-	    $str = update($fh, $str);                           # thanks gareth.jones@stud.man.ac.uk
+            $str = update($fh, $str);                           # thanks gareth.jones@stud.man.ac.uk
         }
         $str =~ s/^>>//o;
         $str = update($fh, $str);
-	# streams can't be followed by a lone carriage-return.
+        # streams can't be followed by a lone carriage-return.
         if (($str =~ s/^stream(?:(?:\015\012)|\012)//o)
-	    && ($res->{'Length'}->val != 0))           # stream
+            && ($res->{'Length'}->val != 0))           # stream
         {
             $k = $res->{'Length'}->val;
             $res->{' streamsrc'} = $fh;
@@ -521,10 +523,13 @@ sub readval
             }
         }
 
-        bless $res, $types{$res->{'Type'}->val}
-                if (defined $res->{'Type'} && defined $types{$res->{'Type'}->val});
-	# gdj: FIXME: if any of the ws chars were crs, then the whole
-	# string might not have been read.
+        if (defined $res->{'Type'} && defined $types{$res->{'Type'}->val})
+        {
+            bless $res, $types{$res->{'Type'}->val};
+            $res->init($self);
+        }
+        # gdj: FIXME: if any of the ws chars were crs, then the whole
+        # string might not have been read.
     } elsif ($str =~ m/^([0-9]+)$ws_char+([0-9]+)$ws_char+R/so) # objind
     {
         $k = $1;
@@ -535,12 +540,12 @@ sub readval
             $res = Text::PDF::Objind->new();
             $res->{' objnum'} = $k;
             $res->{' objgen'} = $value;
+            $res->{' realised'} = 0;
+            $res->{' parent'} = $self;
             $self->add_obj($res, $k, $value);
         }
-        $res->{' parent'} = $self;
-        $res->{' realised'} = 0;
-	# gdj: FIXME: if any of the ws chars were crs, then the whole
- 	# string might not have been read.
+        # gdj: FIXME: if any of the ws chars were crs, then the whole
+        # string might not have been read.
     } elsif ($str =~ m/^([0-9]+)$ws_char+([0-9]+)$ws_char+obj/so)  # object data
     {
         my ($obj);
@@ -567,43 +572,43 @@ sub readval
     } elsif ($str =~ m/^\(/o)  # literal string
     {
         $str =~ s/^\(//o;
-	# We now need to find an unbalanced, unescaped right-paren.
-	# This can't be done with regexps.
-	my ($value) = "";
-	# The current level of nesting, when this reaches 0 we have finished.
-	my ($nested) = 1;
-	while (1) {
-	    # Remove everything up to the first (possibly escaped) paren.
-	    $str =~ /^((?:[^\\()]|\\[^()])*)(.*)/so;
-	    $value .= $1;
-	    $str = $2;
+        # We now need to find an unbalanced, unescaped right-paren.
+        # This can't be done with regexps.
+        my ($value) = "";
+        # The current level of nesting, when this reaches 0 we have finished.
+        my ($nested) = 1;
+        while (1) {
+            # Remove everything up to the first (possibly escaped) paren.
+            $str =~ /^((?:[^\\()]|\\[^()])*)(.*)/so;
+            $value .= $1;
+            $str = $2;
 
-	    if ($str =~ /^(\\[()])/o) {
-		# An escaped paren.  This would be tricky to do with
-		# the regexp above (it's very difficult to be certain
-		# that all cases are covered so I think it's better to
-		# deal with them explicitly).
-		$str = substr ($str, 2);
-		$value = $value . $1;
-	    } elsif ($str =~ /^\)/o) {
-		# Right paren
-		$nested--;
-		$str = substr ($str, 1);
-		if ($nested == 0)
-		    { last; }
-		$value = $value . ')';
-	    } elsif ($str =~ /^\(/o) {
-		# Left paren
-		$nested++;
-		$str = substr ($str, 1);
-		$value = $value . '(';
-	    } else {
-		# No parens, we must read more.  We don't use update
-		# because we don't want to remove whitespace or
-		# comments.
-		$fh->read($str, 255, length($str)) or die "Unterminated string.";
-	    }
-	}
+            if ($str =~ /^(\\[()])/o) {
+                # An escaped paren.  This would be tricky to do with
+                # the regexp above (it's very difficult to be certain
+                # that all cases are covered so I think it's better to
+                # deal with them explicitly).
+                $str = substr ($str, 2);
+                $value = $value . $1;
+            } elsif ($str =~ /^\)/o) {
+                # Right paren
+                $nested--;
+                $str = substr ($str, 1);
+                if ($nested == 0)
+                    { last; }
+                $value = $value . ')';
+            } elsif ($str =~ /^\(/o) {
+                # Left paren
+                $nested++;
+                $str = substr ($str, 1);
+                $value = $value . '(';
+            } else {
+                # No parens, we must read more.  We don't use update
+                # because we don't want to remove whitespace or
+                # comments.
+                $fh->read($str, 255, length($str)) or die "Unterminated string.";
+            }
+        }
 
         $res = Text::PDF::String->from_pdf($value);
     } elsif ($str =~ m/^</o)                                          # hex-string
@@ -639,7 +644,7 @@ sub readval
         $res = Text::PDF::Null->new;
     } else
     {
-	die "Can't parse `$str' near " . ($fh->tell()) . " length " . length($str) . ".";
+        die "Can't parse `$str' near " . ($fh->tell()) . " length " . length($str) . ".";
     }
     
     $str =~ s/^$ws_char*//os;
@@ -700,6 +705,7 @@ sub new_obj
     my ($res);
     my ($tdict, $i, $ni, $ng);
 
+    return $base if ($base->is_obj($self));
     if (defined $self->{' free'} and scalar @{$self->{' free'}} > 0)
     {
         $res = shift(@{$self->{' free'}});
@@ -772,14 +778,17 @@ sub out_obj
 {
     my ($self, $obj) = @_;
 
+    # don't add objects that aren't real objects!
+    if (!defined $self->{' objects'}{$obj->uid})
+    { return $self->new_obj($obj); }
     # This is why we've been keeping the outlist CACHE around; to speed
     # up this method by orders of magnitude (it saves up from having to
     # grep the full outlist each time through as we'll just do a lookup
     # in the hash) (which is super-fast).
-    if (!exists $self->{' outlist_cache'}{$obj})
+    elsif (!exists $self->{' outlist_cache'}{$obj->uid})
     {
         push( @{$self->{' outlist'}}, $obj );
-        $self->{' outlist_cache'}{$obj}++;
+        $self->{' outlist_cache'}{$obj->uid}++;
     }
     $obj;
 }
@@ -813,7 +822,7 @@ sub remove_obj
 
 # who says it has to be fast
     delete $self->{' objects'}{$objind->uid};
-    delete $self->{' outlist_cache'}{$objind};
+    delete $self->{' outlist_cache'}{$objind->uid};
     delete $self->{' printed_cache'}{$objind};
     @{$self->{' outlist'}} = grep($_ ne $objind, @{$self->{' outlist'}});
     @{$self->{' printed'}} = grep($_ ne $objind, @{$self->{' printed'}});
@@ -858,7 +867,7 @@ sub ship_out
         }
         next if ($j < 0);
         splice(@{$self->{' outlist'}}, $j, 1);
-        delete $self->{' outlist_cache'}{$objind};
+        delete $self->{' outlist_cache'}{$objind->uid};
         next if grep {$_ eq $objind} @{$self->{' free'}};
 
         $self->{' locs'}{$objind->uid} = $fh->tell;

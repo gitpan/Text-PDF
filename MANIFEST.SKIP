@@ -8,4 +8,4 @@ test/
 misc/
 \.cvsignore
 Makefile$
-
+\.zip

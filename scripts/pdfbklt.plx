@@ -4,7 +4,9 @@ use Text::PDF::File;
 use Text::PDF::Utils;
 use Getopt::Std;
 
-$version = "1.505";     # MJPH   3-AUG-2002     -s comma separated. Allow -ve values in -s
+
+$version = "1.6";       # MJPH  13-JAN-2003     -s2b option supported
+#$version = "1.505";     # MJPH   3-AUG-2002     -s comma separated. Allow -ve values in -s
 #                                                 merge errors store something, at least!                        
 # $version = "1.504";     # MJPH  27-JUN-2002     Use CropBox over MediaBox
 # $version = "1.503";     # MJPH  19-FEB-2002     Fix -p1 positioning (again!)
@@ -44,6 +46,8 @@ modifications at the end.
                 2   half page right and left (big gutter)
                 2r  half page always on right
                 2l  half page always on left
+                2b  dual half pages on right and left 
+                            assumes last page opposite first
                 4   1/4 page right and left bottom (very big gutter)
                 4t  1/4 page right and left top (very big gutter)
                 4r/4l/4rt/4lt   1/4 page always on right or left bottom or top
@@ -63,8 +67,8 @@ EOT
 $opt_b = $sizes{lc($opt_b)} if defined $sizes{lc($opt_b)};
 print "Reading file\n" unless $opt_q;
 $p = Text::PDF::File->open($ARGV[0], 1) || die "Can't open $ARGV[0]";
-$r = $p->read_obj($p->{'Root'});
-$pgs = $p->read_obj($r->{'Pages'});
+$r = $p->{'Root'}->realise;
+$pgs = $r->{'Pages'}->realise;
 $pgcount = $pgs->{'Count'}->val;
 
 foreach (qw(Outlines Dests Threads AcroForm PageLabels StructTreeRoot OpenAction PageMode))
@@ -79,8 +83,35 @@ foreach (qw(Outlines Dests Threads AcroForm PageLabels StructTreeRoot OpenAction
 $pcount = 0;
 proc_pages($pgs);
 
+if ($opt_s =~ m/b$/o)
+{
+    for ($i = 0; $i < $pgcount; $i++)
+    {
+        my ($pnum) = ($i == 0) ? 0 : 2 * $i - 1;
+        my ($ref) = $pglist[$pnum]->copy($p, undef, 1, $p, 'clip' => ["^/Contents", '^/Resources/[^/]+/.*']);
+        my ($npnum) = ($i == 0) ? -1 : $pnum + 1;
+        $r->{'Pages'}->add_page($ref, $npnum);
+        if ($npnum == -1)
+        { 
+            push (@pglist, $ref); 
+            $pglist[$npnum]{' pnum'} = $pgcount * 2;
+        }
+        else
+        { 
+            splice(@pglist, $npnum, 0, $ref); 
+            $pglist[$npnum]{' pnum'} = $npnum;
+        }
+        $ref->{' pnum'} = $pnum;
+        print STDERR '.' unless $opt_q;
+    }
+    $pgcount *= 2;
+#    $p->append_file;
+#    exit(1);
+}
+
+
 $opt_p = 2 unless defined $opt_p;
-$opt_r = !$opt_r if (($opt_p == 2 && $opt_s !~ /^2[rlt]*$/oi) || ($opt_p != 2 && $opt_s =~ /^2[rlt]*$/oi));
+$opt_r = !$opt_r if (($opt_p == 2 && $opt_s !~ /^2[rltb]*$/oi) || ($opt_p != 2 && $opt_s =~ /^2[rlt]*$/oi));
 
 if ($opt_b =~ m/^([0-9]+)\;([0-9]+)/oi)
 { @pbox = (0, 0, $1, $2); }
@@ -103,7 +134,7 @@ unless ($opt_q)
     print "\nThere are $pgcount pages\n";
     print "Page box (pt) = $pbox[0], $pbox[1], $pbox[2], $pbox[3]\n";
 }
-$rpc = int(($pgcount + 3) / 4) * 4;
+$rpc = ($opt_p == 1) ? $pgcount : int(($pgcount + 3) / 4) * 4;
 
 for ($i = 0; $i < $rpc / $opt_p; $i++)
 {
@@ -137,18 +168,18 @@ $p->append_file;
 sub proc_pages
 {
     my ($pgs) = @_;
-    my ($pg, $pgref);
+    my ($pgref);
 
     foreach $pgref ($pgs->{'Kids'}->elementsof)
     {
         print STDERR "." unless $opt_q;
-        $pg = $p->read_obj($pgref);
-        if ($pg->{'Type'}->val =~ m/^Pages$/oi)
-        { proc_pages($pg); }
+        $pgref->realise;
+        if ($pgref->{'Type'}->val =~ m/^Pages$/oi)
+        { proc_pages($pgref); }
         else
         {
-            $pgref->{' pnum'} = $pcount++;
             push (@pglist, $pgref);
+            $pgref->{' pnum'} = $pcount++;
         }
     }
 }
@@ -163,7 +194,7 @@ sub merge_pages
     for ($j = 0; $j <= $#pr; $j++)
     {
         next unless defined $pr[$j];
-        @prbox = ();
+        @prbox = (); @clipbox = ();
         foreach $n (($pr[$j]->find_prop('CropBox') || $pr[$j]->find_prop('MediaBox'))->elementsof)
         { push(@prbox, $n->val); }
         $is = 1;
@@ -174,7 +205,8 @@ sub merge_pages
             $is = $1;
             $rl = lc($2);
             $bt = lc($3);
-            $rl = ($pr[$j]->{' pnum'} & 1) ? "l" : "r" unless ($rl ne "");
+#            $rl = ($pr[$j]->{' pnum'} & 1) ? "l" : "r" unless ($rl =~ m/[rl]/o);
+            $rl = ($j & 1) ? "l" : "r" unless ($rl =~ m/[rl]/o);
             if ($rl eq "r")
             { $prbox[1] = $prbox[3] - (($prbox[3] - $prbox[1]) / $is); }
             elsif ($rl eq "l")
@@ -184,6 +216,8 @@ sub merge_pages
             { $prbox[2] = $prbox[0] + (($prbox[2] - $prbox[0]) * 2 / $is); }
             elsif ($is == 4)
             { $prbox[0] = $prbox[2] - (($prbox[2] - $prbox[0]) * 2 / $is); }
+            elsif ($opt_s =~ m/b$/o)
+            { @clipbox = ($prbox[0], $prbox[1], $prbox[2] - $prbox[0], $prbox[3] - $prbox[1]); }
         }
         elsif ($opt_s)
         { die "Illegal -s value of $opt_s"; }
@@ -211,75 +245,76 @@ sub merge_pages
                 $slist[0] = cm($xs, 0, 0, $ys,
 #                        $pbox[0] - ($xs * $prbox[0]), $pbox[1] - ($ys * $prbox[1]));
                         .5 * ($pbox[2] + $pbox[0] - $xs * ($prbox[2] + $prbox[0])),
-                        .5 * ($pbox[3] + $pbox[1] - $ys * ($prbox[3] + $prbox[1])));
+                        .5 * ($pbox[3] + $pbox[1] - $ys * ($prbox[3] + $prbox[1])), @clipbox);
             } elsif ($opt_p == 1)                   # landscape on portrait to portrait
             {
                 $slist[0] = cm(0, -$scale * $ys, $xs / $scale, 0,
-                        $pbox[0] - $xs * $prbox[1] / $scale, $pbox[1] + $scale * $ys * $prbox[2]);
+                        $pbox[0] - $xs * $prbox[1] / $scale, $pbox[1] + $scale * $ys * $prbox[2], @clipbox);
             } elsif ($opt_p == 2 && $is != 2)       # portrait source on portrait
             {
                 @scalestr = (0, 0.5 * $ys * $scale, -$xs / $scale, 0,
-                        0.5 * ($xs * ($prbox[3] + $prbox[1]) / $scale + $pbox[2]));
+                        0.5 * ($xs * ($prbox[3] + $prbox[1]) / $scale + $pbox[2]), @clipbox);
                 $slist[0] = cm(@scalestr,
 #                        0.5 * (-$ys * $scale * $prbox[0] + $pbox[1] + $pbox[3]));
-                         .25 * (3 * ($pbox[1] + $pbox[3]) - $ys * $scale * ($prbox[2] + $prbox[0])));
+                         .25 * (3 * ($pbox[1] + $pbox[3]) - $ys * $scale * ($prbox[2] + $prbox[0])), @clipbox);
                 $slist[1] = cm(@scalestr,
 #                        -0.5 * $ys * $scale * $prbox[0] + $pbox[1]);
-                         .25 * (3 * $pbox[1] + $pbox[3] - $ys * $scale * ($prbox[2] + $prbox[0])));
+                         .25 * (3 * $pbox[1] + $pbox[3] - $ys * $scale * ($prbox[2] + $prbox[0])), @clipbox);
             } elsif ($opt_p == 2)                   # double page landscape on portrait
             {
                 @scalestr = ($xs, 0, 0, 0.5 * $ys, .5 * ($pbox[2] - $xs * ($prbox[2] - $prbox[0])));
 #                -$xs * $prbox[0] + $pbox[0]);
-#                $slist[0] = cm(@scalestr, 0.5 * (-$ys * $prbox[1] + $pbox[1] + $pbox[3]));
-#                $slist[1] = cm(@scalestr, -0.5 * $ys * $prbox[1] + $pbox[1]);
-                $slist[0] = cm(@scalestr, .25 * (3 * $pbox[3] + $pbox[1] - $ys * ($prbox[3] - $prbox[1])) - $prbox[1]);
-                $slist[1] = cm(@scalestr, .25 * (3 * $pbox[1] + $pbox[3] - $ys * ($prbox[3] - $prbox[1])) - $prbox[1]);
+#                $slist[0] = cm(@scalestr, 0.5 * (-$ys * $prbox[1] + $pbox[1] + $pbox[3]), @clipbox);
+#                $slist[1] = cm(@scalestr, -0.5 * $ys * $prbox[1] + $pbox[1], @clipbox);
+                $slist[0] = cm(@scalestr, .25 * (3 * $pbox[3] + $pbox[1] - $ys * ($prbox[3] - $prbox[1])) - $prbox[1], @clipbox);
+                $slist[1] = cm(@scalestr, .25 * (3 * $pbox[1] + $pbox[3] - $ys * ($prbox[3] - $prbox[1])) - $prbox[1], @clipbox);
             } elsif ($opt_p == 4 && $is == 1)       # true portrait
             {
                 $a = .5 * $xs; $b = .5 * $ys;
                 $slist[0] = cm($a, 0, 0, $b,
-                        -$a * $prbox[0] + 0.5 * ($pbox[0] + $pbox[2]), -$b * $prbox[1] + $pbox[1]);
+                        -$a * $prbox[0] + 0.5 * ($pbox[0] + $pbox[2]), -$b * $prbox[1] + $pbox[1], @clipbox);
                 $slist[2] = cm(-$a, 0, 0, -$b,
-                        $a * $prbox[0] + 0.5 * ($pbox[0] + $pbox[2]), $b * $prbox[1] + $pbox[3]);
+                        $a * $prbox[0] + 0.5 * ($pbox[0] + $pbox[2]), $b * $prbox[1] + $pbox[3], @clipbox);
                 if ($opt_p =~ /s/o)
                 {
                     $slist[1] = cm($a, 0, 0, $b,
-                            -$a * $prbox[0] + 0.5 * ($pbox[0] + $pbox[2]), -$b * $prbox[1] + 0.5 * ($pbox[1] + $pbox[3]));
+                            -$a * $prbox[0] + 0.5 * ($pbox[0] + $pbox[2]), -$b * $prbox[1] + 0.5 * ($pbox[1] + $pbox[3]), @clipbox);
                     $slist[3] = cm(-$a, 0, 0, -$b,
-                            $a * $prbox[0] + 0.5 * ($pbox[0] + $pbox[2]), $b * $prbox[1] + 0.5 * ($pbox[1] + $pbox[3]));
+                            $a * $prbox[0] + 0.5 * ($pbox[0] + $pbox[2]), $b * $prbox[1] + 0.5 * ($pbox[1] + $pbox[3]), @clipbox);
                 }
                 else
                 {
                     $slist[1] = cm(-$a, 0, 0, -$b,
-                            $a * $prbox[0] + $pbox[2], $b * $prbox[1] + $pbox[3]);
+                            $a * $prbox[0] + $pbox[2], $b * $prbox[1] + $pbox[3], @clipbox);
                     $slist[3] = cm($a, 0, 0, $b,
-                            -$a * $prbox[0] + $pbox[0], -$b * $prbox[1] + $pbox[1]);
+                            -$a * $prbox[0] + $pbox[0], -$b * $prbox[1] + $pbox[1], @clipbox);
                 }
             } elsif ($opt_p == 4)
             {
                 $a = .5 * $ys * $scale; $b = .5 * $xs / $scale;
                 $slist[0] = cm(0, -$a, $b, 0,
-                        -$b * $prbox[1] + 0.5 * ($pbox[0] + $pbox[2]), $a * $prbox[2] + $pbox[1]);
+                        -$b * $prbox[1] + 0.5 * ($pbox[0] + $pbox[2]), $a * $prbox[2] + $pbox[1], @clipbox);
                 $slist[2] = cm(0, $a, -$b, 0,
-                        $b * $prbox[1] + 0.5 * ($pbox[0] + $pbox[2]), -$a * $prbox[2] + $pbox[3]);
+                        $b * $prbox[1] + 0.5 * ($pbox[0] + $pbox[2]), -$a * $prbox[2] + $pbox[3], @clipbox);
                 if ($opt_p =~ /s/o)
                 {
                     $slist[1] = cm(0, -$a, $b, 0,
-                            -$b * $prbox[1] + 0.5 * ($pbox[0] + $pbox[2]), $a * $prbox[2] + 0.5 * ($pbox[1] + $pbox[3]));
+                            -$b * $prbox[1] + 0.5 * ($pbox[0] + $pbox[2]), $a * $prbox[2] + 0.5 * ($pbox[1] + $pbox[3]), @clipbox);
                     $slist[3] = cm(0, $a, -$b, 0,
-                            $b * $prbox[1] + 0.5 * ($pbox[0] + $pbox[2]), -$a * $prbox[2] + 0.5 * ($pbox[1] + $pbox[3]));
+                            $b * $prbox[1] + 0.5 * ($pbox[0] + $pbox[2]), -$a * $prbox[2] + 0.5 * ($pbox[1] + $pbox[3]), @clipbox);
                 }
                 else
                 {
                     $slist[1] = cm(0, $a, -$b, 0,
-                            $b * $prbox[1] + $pbox[2], -$a * $prbox[2] + $pbox[3]);
+                            $b * $prbox[1] + $pbox[2], -$a * $prbox[2] + $pbox[3], @clipbox);
                     $slist[3] = cm(0, -$a, $b, 0,
-                            -$b * $prbox[1] + $pbox[0], $a * $prbox[2] + $pbox[1]);
+                            -$b * $prbox[1] + $pbox[0], $a * $prbox[2] + $pbox[1], @clipbox);
                 }
             }
             $scache{$id} = [@slist];
         }
         @s = $pr[$j]->{'Contents'}->elementsof if (defined $pr[$j]->{'Contents'});
+        
         if (!defined $s)
         {
             $min = 100000;
@@ -313,30 +348,21 @@ sub merge_pages
             while (defined $pr2->{'Parent'})
             {
                 $temp = $pr2->{'Parent'};
-                $temp->{'Kids'}->removeobj($pr2);
+                $temp->{'Kids'}->removeobj($pr2) 
+                        if ($pr2->{'Type'}{'val'} eq 'Page' || $pr2->{'Kids'}->elementsof <= 0);
                 $temp->{'Count'}{'val'}--;
-                $p->out_obj($temp);
-                if ($pr2->{'Parent'}{'Kids'}->elementsof <= 0)
+                $pr2 = $temp;
+                if ($pr2->{'Kids'}->elementsof <= 0)
                 {
-                    print "Killing a tree! $pr2->{'Parent'}{'num'}\n" unless $opt_q;
-                    $pr2 = $pr2->{'Parent'};
+                    print "Killing a tree! $pr2->{'num'}\n" unless $opt_q;
                     $p->free_obj($pr2);
                 } else
-                {
-                    $pr2 = $temp->{'Parent'};
-                    while (defined $pr2)
-                    {
-                        $p->out_obj($pr2);
-                        $pr2->{'Count'}{'val'}--;
-                        $pr2 = $pr2->{'Parent'};
-                    }
-                }
+                { $p->out_obj($pr2); }
             }
         }
     }
     return 1 unless defined $bp;
-    $bp->{'Contents'} = $bp->{' Contents'};
-    undef $bp->{' Contents'};
+    $bp->{'Contents'} = delete $bp->{' Contents'};
     foreach (qw(Annots Thumb Beeds CropBox))
     { delete $bp->{$_} if defined $bp->{$_}; }
     $bp->bbox(@pbox);
@@ -349,8 +375,10 @@ sub merge_dict
 
     return $p1 if (ref $p1 eq "Text::PDF::Objind" && ref $p2 eq "Text::PDF::Objind"
             && $p->{' objects'}{$p1->uid}[0] eq $p->{' objects'}{$p2->uid}[0]);
-    $p1 = $p->read_obj($p1) if (ref $p1 eq "Text::PDF::Objind");
-    $p2 = $p->read_obj($p2) if (ref $p2 eq "Text::PDF::Objind");
+#    $p1 = $p->read_obj($p1) if (ref $p1 eq "Text::PDF::Objind");
+#    $p2 = $p->read_obj($p2) if (ref $p2 eq "Text::PDF::Objind");
+    $p1->realise;
+    $p2->realise;
 
     my ($k, $v1, $v2);
     my (@a1, @a2, %a1);
@@ -372,8 +400,8 @@ sub merge_dict
         next if $v1 eq $v2 || !defined $v2;     # !defined added v1.201
         if (ref $v1 eq "Text::PDF::Objind" || ref $v2 eq "Text::PDF::Objind")
         {
-            $v1 = $p->read_obj($v1) if (ref $v1 eq "Text::PDF::Objind");
-            $v2 = $p->read_obj($v2) if (ref $v2 eq "Text::PDF::Objind");
+            $v1->realise if (ref $v1 eq "Text::PDF::Objind");
+            $v2->realise if (ref $v2 eq "Text::PDF::Objind");
         }
         next unless defined $v2;
         
@@ -408,15 +436,25 @@ sub merge_dict
 sub cm
 {
     my (@a) = @_;
-    my ($res, $r);
+    my ($res, $r, $str);
 
     foreach $r (@a)
     { $r = int($r) if (abs($r - int($r)) < 1e-6); }
-    return undef if ($a[0] == 1 && $a[1] == 0 && $a[2] == 0 && $a[3] == 1 && $a[4] == 0 && $a[5] == 0);
+    $str = "$a[6] $a[7] $a[8] $a[9] re W n" if (defined $a[6]);
+    return undef if ($a[0] == 1 && $a[1] == 0 && $a[2] == 0 && $a[3] == 1 && $a[4] == 0 && $a[5] == 0 && $str eq '');
 
     $res = PDFDict();
     $p->new_obj($res);
-    $res->{' stream'} = "$a[0] $a[1] $a[2] $a[3] $a[4] $a[5] cm";
+    $res->{' stream'} = "$a[0] $a[1] $a[2] $a[3] $a[4] $a[5] cm $str";
     $res;
 }
 
+sub copy_page
+{
+    my ($page) = @_;
+    return undef unless $page;
+    my ($res) = $page->copy;
+    $p->new_obj($res);
+    
+    $res;
+}
