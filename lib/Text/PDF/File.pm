@@ -143,7 +143,8 @@ use Text::PDF::Page;
 use Text::PDF::Pages;
 use Text::PDF::Null;
 
-$VERSION = "0.22";      # MJPH  26-JUL-2002     Add Text::PDF::File::copy, tidy up update(), sort out out_trailer
+$VERSION = "0.23";      # MJPH  14-AUG-2002     Fix MANIFEST
+#$VERSION = "0.22";      # MJPH  26-JUL-2002     Add Text::PDF::File::copy, tidy up update(), sort out out_trailer
 #                                                Fix to not remove string final CRs when reading dictionaries
 #$VERSION = "0.21";      # GJ     8-JUN-2002     Tidy up regexps, add Text::PDF::Null
 #$VERSION = "0.20";      # MJPH  27-APR-2002     $trailer->{'Size'} becomes max num objects, fix line end problem,

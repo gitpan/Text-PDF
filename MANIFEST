@@ -2,6 +2,7 @@ MANIFEST
 MANIFEST.SKIP
 Make.PM
 Makefile.PL
+alpha.zip
 examples/CD.CFG
 examples/call_conf.txt
 examples/graph.pl
@@ -11,6 +12,7 @@ examples/pdfaddpg.pl
 examples/pdfcrop.pl
 examples/pdfgetobj.pl
 examples/pdflines.pl
+examples/squares.pdf
 examples/test.pdf
 lib/Text/PDF/Array.pm
 lib/Text/PDF/Bool.pm
@@ -18,6 +20,7 @@ lib/Text/PDF/Dict.pm
 lib/Text/PDF/File.pm
 lib/Text/PDF/Filter.pm
 lib/Text/PDF/Name.pm
+lib/Text/PDF/Null.pm
 lib/Text/PDF/Number.pm
 lib/Text/PDF/Objind.pm
 lib/Text/PDF/Page.pm
