@@ -78,11 +78,30 @@ sub add
         foreach (@{$self->{' outto'}})
         { $_->new_obj($strm); }
         $self->{'Contents'} = PDFArray() unless defined $self->{'Contents'};
+        unless (ref $self->{'Contents'} eq "Text::PDF::Array")
+        { $self->{'Contents'} = PDFArray($self->{'Contents'}); }
         $self->{'Contents'}->add_elements($strm);
         $self->{' curstrm'} = $strm;
     }
 
     $strm->{' stream'} .= $str;
+    $self;
+}
+
+
+=head2 $p->ship_out($pdf)
+
+Ships the page out to the given output file context
+
+=cut
+
+sub ship_out
+{
+    my ($self, $pdf) = @_;
+
+    $pdf->ship_out($self);
+    if (defined $self->{'Contents'})
+    { $pdf->ship_out($self->{'Contents'}->elementsof); }
     $self;
 }
 

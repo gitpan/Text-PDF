@@ -157,7 +157,7 @@ sub read_stream
     my ($self, $force_memory) = @_;
     my ($fh) = $self->{' streamsrc'};
     my (@filts, $f, $last, $i, $dat);
-    my ($len) = $self->{'Length'}->fullval;
+    my ($len) = $self->{'Length'}->val;
 
     $self->{' stream'} = "";
 

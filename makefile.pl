@@ -8,5 +8,6 @@ WriteMakefile (
         EXE_FILES => \@scripts,
         AUTHOR => "martin_hosken\@sil.org",
         ABSTRACT => "PDF Manipulation and generation",
+        PREREQ_PM => {'Compress::Zlib' => 0}
     );
     

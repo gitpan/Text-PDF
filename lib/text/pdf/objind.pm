@@ -47,12 +47,12 @@ use strict;
 use vars qw(@inst %inst $uidc);
 
 # protected keys during emptying and copying, etc.
-@inst = qw(parent objnum objgen isfree nextfree);
 
 BEGIN
 {
+    @inst = qw(parent objnum objgen isfree nextfree uid);
     map {$inst{" $_"} = 1} @inst;
-    $uidc = "pdf_uid000";
+    $uidc = "pdfuid000";
 }
 
 
@@ -227,4 +227,6 @@ sub copy
     }
     $res;
 }
+
+1;
 

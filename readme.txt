@@ -22,6 +22,11 @@ In summary, this module provides a strong (IMO) base for working with PDF files
 but lacks some finesse. Users should know their way around the PDF specification.
 
 
+REQUIREMENTS
+
+For the most part, this module set requires Compress::Zlib. It is used
+for compressed streams and within the Standard Fonts.
+
 INSTALLATION
 
 If you want to have TrueType support in your application, then you will

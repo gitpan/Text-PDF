@@ -23,7 +23,6 @@ to entries in the appropriate PDF dictionaries.
 use strict;
 use vars qw(@ISA);
 
-use IO::Scalar;
 use Text::PDF::TTFont;
 @ISA = qw(Text::PDF::TTFont);
 
@@ -34,7 +33,7 @@ use Text::PDF::Utils;
 
 Creates a new font resource for the given fontfile. This includes the font
 descriptor and the font stream. The $pdfname is the name by which this font
-resource will be known throught a particular PDF file.
+resource will be known throughout a particular PDF file.
 
 All font resources are full PDF objects.
 
@@ -43,14 +42,16 @@ All font resources are full PDF objects.
 sub new
 {
     my ($class, $parent, $fontname, $pdfname, %opt) = @_;
-    my ($self) = $class->SUPER::new($parent, $fontname, $pdfname);
-    my ($font) = $self->{' font'};
     my ($desc, $sinfo, $unistr, $touni, @rev);
     my ($i, $first, $num, $upem, @wid, $name, $ff2, $ffh);
 
+    my ($self) = $class->SUPER::new($parent, $fontname, $pdfname);
+    my ($font) = $self->{' font'};
+
     $self->{'Subtype'} = PDFName('Type0');
     $self->{'Encoding'} = PDFName('Identity-H');
-    
+
+    $parent->{'Version'} = 3;
     $desc = PDFDict();
     $parent->new_obj($desc);
     $desc->{'Type'} = $self->{'Type'};
@@ -94,7 +95,7 @@ sub new
     $ff2 = $desc->{'FontDescriptor'}{'FontFile2'};
     delete $ff2->{' streamfile'};
     $ff2->{' stream'} = "";
-    $ffh = IO::Scalar->new(\$ff2->{' stream'});
+    $ffh = Text::PDF::TTIOString->new(\$ff2->{' stream'});
     $font->out($ffh, 'cvt ', 'fpgm', 'glyf', 'head', 'hhea', 'hmtx', 'loca', 'maxp', 'prep');
     $ff2->{'Filter'} = PDFName("FlateDecode");
     $ff2->{'Length1'} = PDFNum(length($ff2->{' stream'}));
@@ -127,6 +128,50 @@ sub new
     }
     
     $self;
+}
+
+
+=head2 ship_out($pdf)
+
+Ship this font out to the given $pdf file context
+
+=cut
+
+sub ship_out
+{
+    my ($self, $pdf) = @_;
+    my ($d);
+
+    foreach $d ($self->{'DescendantFonts'}->elementsof)
+    { $pdf->ship_out($self, $d, $d->{'FontDescriptor'},
+            $d->{'FontDescriptor'}{'FontFile2'}); }
+    $pdf->ship_out($self->{'ToUnicode'}) if (defined $self->{'ToUnicode'});
+    $self;
+}
+
+
+=head2 empty
+
+Empty the font of as much as possible in order to save memory
+
+=cut
+
+sub empty
+{
+    my ($self) = @_;
+    my ($d);
+
+    if (defined $self->{'DescendantFonts'})
+    {
+        foreach $d ($self->{'DescendantFonts'}->elementsof)
+        {
+            $d->{'FontDescriptor'}{'FontFile2'}->empty;
+            $d->{'FontDescriptor'}->empty;
+            $d->empty;
+        }
+    }
+    $self->{'ToUnicode'}->empty if (defined $self->{'ToUnicode'});
+    $self->SUPER::empty;
 }
 
 1;

@@ -1,5 +1,6 @@
 MANIFEST
 Makefile.PL
+lib/Text/PDF/.#File.pm.1.2
 lib/Text/PDF/Array.pm
 lib/Text/PDF/Bool.pm
 lib/Text/PDF/Dict.pm

@@ -235,3 +235,127 @@ sub copy
     return $self->SUPER::copy($pdf, $res);
 }
 
+package Text::PDF::TTIOString;
+
+=head1 TITLE
+
+Text::PDF::TTIOString - internal IO type handle for string output for font
+embedding. This code is ripped out of IO::Scalar, to save the direct dependence
+for so little. See IO::Scalar for details
+
+=cut
+
+sub new {
+    my $self = bless {}, shift;
+    $self->open(@_) if @_;
+    $self;
+}
+
+sub DESTROY { 
+    shift->close;
+}
+
+
+sub open {
+    my ($self, $sref) = @_;
+
+    # Sanity:
+    defined($sref) or do {my $s = ''; $sref = \$s};
+    (ref($sref) eq "SCALAR") or die "open() needs a ref to a scalar";
+
+    # Setup:
+    $self->{Pos} = 0;
+    $self->{SR} = $sref;
+    $self;
+}
+
+sub close {
+    my $self = shift;
+    %$self = ();
+    1;
+}
+
+sub getc {
+    my $self = shift;
+    
+    # Return undef right away if at EOF; else, move pos forward:
+    return undef if $self->eof;  
+    substr(${$self->{SR}}, $self->{Pos}++, 1);
+}
+
+if(0)
+{
+sub getline {
+    my $self = shift;
+
+    # Return undef right away if at EOF:
+    return undef if $self->eof;
+
+    # Get next line:
+    pos(${$self->{SR}}) = $self->{Pos}; # start matching at this point
+    ${$self->{SR}} =~ m/(.*?)(\n|\Z)/g; # match up to newline or EOS
+    my $line = $1.$2;                   # save it
+    $self->{Pos} += length($line);      # everybody remember where we parked!
+    return $line; 
+}
+
+sub getlines {
+    my $self = shift;
+    wantarray or croak("Can't call getlines in scalar context!");
+    my ($line, @lines);
+    push @lines, $line while (defined($line = $self->getline));
+    @lines;
+}
+}
+
+sub print {
+    my $self = shift;
+    my $eofpos = length(${$self->{SR}});
+    my $str = join('', @_);
+
+    if ($self->{'Pos'} == $eofpos)
+    {
+        ${$self->{SR}} .= $str;
+        $self->{Pos} = length(${$self->{SR}});
+    } else
+    {
+        substr(${$self->{SR}}, $self->{Pos}, length($str)) = $str;
+        $self->{Pos} += length($str);
+    }
+    1;
+}
+
+sub read {
+    my ($self, $buf, $n, $off) = @_;
+    die "OFFSET not yet supported" if defined($off);
+    my $read = substr(${$self->{SR}}, $self->{Pos}, $n);
+    $self->{Pos} += length($read);
+    $_[1] = $read;
+    return length($read);
+}
+
+sub eof {
+    my $self = shift;
+    ($self->{Pos} >= length(${$self->{SR}}));
+}
+
+sub seek {
+    my ($self, $pos, $whence) = @_;
+    my $eofpos = length(${$self->{SR}});
+
+    # Seek:
+    if    ($whence == 0) { $self->{Pos} = $pos }             # SEEK_SET
+    elsif ($whence == 1) { $self->{Pos} += $pos }            # SEEK_CUR
+    elsif ($whence == 2) { $self->{Pos} = $eofpos + $pos}    # SEEK_END
+    else                 { die "bad seek whence ($whence)" }
+
+    # Fixup:
+    if ($self->{Pos} < 0)       { $self->{Pos} = 0 }
+    if ($self->{Pos} > $eofpos) { $self->{Pos} = $eofpos }
+    1;
+}
+
+sub tell { shift->{Pos} }
+
+1;
+
