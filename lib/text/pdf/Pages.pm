@@ -1,14 +1,15 @@
-package PDF::Pages;
+package Text::PDF::Pages;
 
 use strict;
 use vars qw(@ISA);
-@ISA = qw(PDF::Dict);
+@ISA = qw(Text::PDF::Dict);
 
-use PDF::Dict;
+use Text::PDF::Dict;
+use Text::PDF::Utils;
 
 =head1 NAME
 
-PDF::Pages - a PDF pages hierarchical element. Inherits from L<PDF::Dict>
+Text::PDF::Pages - a PDF pages hierarchical element. Inherits from L<Text::PDF::Dict>
 
 =head1 DESCRIPTION
 
@@ -17,7 +18,7 @@ themselves.
 
 =head1 METHODS
 
-=head2 PDF::Pages->new($parent)
+=head2 Text::PDF::Pages->new($parent)
 
 This creates a new Pages object. Notice that $parent here is not the file
 context for the object but the parent pages object for this pages. If we
@@ -28,24 +29,17 @@ file context, which is identified by not having a Type of Pages.
 
 sub new
 {
-    my ($class, $parent) = @_;
-    my ($self, $pere);
+    my ($class, $pdf, $parent) = @_;
+    my ($self);
 
-    unless (defined $parent->{'Type'} && $parent->{'Type'}->val eq "Pages")
-    {
-        $pere = $parent;
-        undef $parent;
-    } else
-    { $pere = $parent->{' parent'}; }
-
-    $self = $class->SUPER::new($pere);
-    $self->{'Type'} = PDF::Name->new($pere, "Pages");
+    $self = $class->SUPER::new;
+    $self->{'Type'} = PDFName("Pages");
     $self->{'Parent'} = $parent if defined $parent;
-    $pere->{'Root'}{'Pages'} = $self unless defined $parent;
-    $self->{'Count'} = PDF::Number->new($pere, 0);
-    $self->{'Kids'} = PDF::Array->new($pere);
+    $pdf->{'Root'}{'Pages'} = $self unless defined $parent;
+    $self->{'Count'} = PDFNum(0);
+    $self->{'Kids'} = Text::PDF::Array->new;
 
-    $pere->new_obj($self);
+    $pdf->new_obj($self);
     $self;
 }
 
@@ -89,19 +83,17 @@ sub add_font
     my ($self, $font) = @_;
     my ($name) = $font->{'Name'}->val;
     my ($dict) = $self->find_prop('Resources');
-    my ($parent) = $self->{' parent'};
 
     return $self if ($dict ne "" && defined $dict->{'Font'} && defined $dict->{'Font'}{$name});
     unless (defined $self->{'Resources'})
-    { $self->{'Resources'} = $dict ne ""? $dict->copy : PDF::Dict->new($parent); }
-    $self->{'Resources'}{'Font'} = PDF::Dict->new($parent)
-            unless defined $self->{'Resources'}{'Font'};
+    { $self->{'Resources'} = $dict ne ""? $dict->copy : PDFDict(); }
+    $self->{'Resources'}{'Font'} = PDFDict() unless defined $self->{'Resources'}{'Font'};
     $self->{'Resources'}{'Font'}{$name} = $font;
     $self;
 }
 
 
-=head2 $p->bbox($xmin, $ymin, $xmax, $ymax)
+=head2 $p->bbox($xmin, $ymin, $xmax, $ymax, [$param])
 
 Specifies the bounding box for this and all child pages. If the values are
 identical to those inherited then no change is made.
@@ -111,7 +103,8 @@ identical to those inherited then no change is made.
 sub bbox
 {
     my ($self, @bbox) = @_;
-    my ($inh) = $self->find_prop('MediaBox');
+    my ($str) = $bbox[4] || 'MediaBox';
+    my ($inh) = $self->find_prop($str);
     my ($test, $i, $e);
 
     if ($inh ne "")
@@ -122,10 +115,10 @@ sub bbox
         return $self if $test && $i == 4;
     }
 
-    $inh = PDF::Array->new($self->{' parent'});
-    foreach $e (@bbox)
-    { $inh->add_elements(PDF::Number->new($self->{' parent'}, $e)); }
-    $self->{'MediaBox'} = $inh;
+    $inh = Text::PDF::Array->new;
+    foreach $e (@bbox[0..3])
+    { $inh->add_elements(PDFNum($e)); }
+    $self->{$str} = $inh;
     $self;
 }
 
@@ -141,7 +134,6 @@ sub proc_set
 {
     my ($self, @entries) = @_;
     my (@temp) = @entries;
-    my ($parent) = $self->{' parent'};
     my ($dict, $e);
 
     $dict = $self->find_prop('Resource');
@@ -154,13 +146,12 @@ sub proc_set
     }
 
     unless (defined $self->{'Resources'})
-    { $self->{'Resources'} = $dict ne "" ? $dict->copy : PDF::Dict->new($parent); }
+    { $self->{'Resources'} = $dict ne "" ? $dict->copy : PDFDict(); }
 
-    $self->{'Resources'}{'ProcSet'} = PDF::Array->new($parent)
-            unless defined $self->{'ProcSet'};
+    $self->{'Resources'}{'ProcSet'} = PDFArray() unless defined $self->{'ProcSet'};
 
     foreach $e (@entries)
-    { $self->{'Resources'}{'ProcSet'}->add_elements(PDF::Name->new($parent, $e)); }
+    { $self->{'Resources'}{'ProcSet'}->add_elements(PDFName($e)); }
     $self;
 }
 

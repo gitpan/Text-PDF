@@ -1,12 +1,12 @@
-package PDF::Dict;
+package Text::PDF::Dict;
 
 use strict;
 use vars qw(@ISA $mincache $tempbase);
 
-use PDF::Objind;
-@ISA = qw(PDF::Objind);
+use Text::PDF::Objind;
+@ISA = qw(Text::PDF::Objind);
 
-use PDF::Filter;
+use Text::PDF::Filter;
 
 BEGIN
 {
@@ -17,7 +17,7 @@ BEGIN
 
 =head1 NAME
 
-PDF::Dict - PDF Dictionaries and Streams. Inherits from L<PDF::Objind>
+Text::PDF::Dict - PDF Dictionaries and Streams. Inherits from L<PDF::Objind>
 
 =head1 INSTANCE VARIABLES
 
@@ -40,16 +40,6 @@ source PDF the stream starts.
 
 =head1 METHODS
 
-=head2 PDF::Dict->new($parent)
-
-Creates a dictionary with the given storage parent (note this is not, for example
-an owning dictionary, but the parent of that dictionary.)
-
-=cut
-
-sub new
-{ return bless {' parent' => $_[1]}, $_[0]; }
-
 
 =head2 $d->outobjdeep($fh)
 
@@ -63,92 +53,91 @@ stream's dictionary.
 
 sub outobjdeep
 {
-    my ($self, $fh) = @_;
+    my ($self, $fh, $pdf) = @_;
     my ($key, $val, $f, @filts);
-    my ($loc, $str);
-
-    $self->SUPER::outobjdeep($fh);
+    my ($loc, $str, %specs);
 
     if (defined $self->{' stream'} or defined $self->{' streamfile'} or defined $self->{' streamloc'})
     {
-        if ((defined $self->{'Filter'} && $self->{'Filter'} ne "") || !defined $self->{' stream'})
+        if ($self->{'Filter'} || !$self->{' stream'})
         {
-            $self->{'Length'} = PDF::Number->new($self->{' parent'}, 0)
-                    unless defined $self->{'Length'};
-            $self->{' parent'}->new_obj($self->{'Length'}) unless $self->{'Length'}->is_obj;
+            $self->{'Length'} = Text::PDF::Number->new(0) unless (defined $self->{'Length'});
+            $pdf->new_obj($self->{'Length'}) unless ($self->{'Length'}->is_obj($pdf));
         } else
-        { $self->{'Length'} = PDF::Number->new($self->{' parent'}, length($self->{' stream'}) + 1); }
+        { $self->{'Length'} = Text::PDF::Number->new(length($self->{' stream'}) + 1); }
     }
 
-    print $fh "<<\n";
-    if (defined $self->{'Type'})
+    $fh->print("<<\n");
+    foreach ('Type', 'Subtype')
     {
-        print $fh "/Type ";
-        $self->{'Type'}->outobj($fh);
-        print $fh "\n";
+        $specs{$_} = 1;
+        if (defined $self->{$_})
+        {
+            $fh->print("/$_ ");
+            $self->{$_}->outobj($fh, $pdf);
+            $fh->print("\n");
+        }
     }
     while (($key, $val) = each %{$self})
     {
-        next if ($key =~ m/^\s/oi || $key eq "Type");
+        next if ($key =~ m/^\s/oi || $specs{$key});
         next if $val eq "";
         $key =~ s|([\000-\020%()\[\]{}<>#/])|"#".sprintf("%02X", ord($1))|oige;
-        print $fh "/$key ";
-        $val->outobj($fh);
-        print $fh "\n";
+        $fh->print("/$key ");
+        $val->outobj($fh, $pdf);
+        $fh->print("\n");
     }
-    print $fh ">>";
+    $fh->print(">>");
 
 #now handle the stream (if any)
     if (defined $self->{' streamloc'} && !defined $self->{' stream'})
     {                                   # read a stream if infile
-        $loc = tell($fh);
+        $loc = $fh->tell;
         $self->read_stream;
-        seek($fh, $loc, 0);
+        $fh->seek($loc, 0);
     }
 
     if (defined $self->{'Filter'})
     {
         foreach $f ($self->{'Filter'}->elementsof)
         {
-            my ($temp) = "PDF::" . $f->val;
+            my ($temp) = "Text::PDF::" . $f->val;
             push(@filts, $temp->new());
         }
     }
 
     if (defined $self->{' stream'})
     {
-        print $fh "\nstream\n";
-        $loc = tell($fh);
+        $fh->print("\nstream\n");
+        $loc = $fh->tell;
         $str = $self->{' stream'};
         foreach $f (reverse @filts)
         { $str = $f->outfilt($str, 1); }
-        print $fh $str;
-        $self->{'Length'}{'val'} = tell($fh) - $loc + 1 if $#filts >= 0;
-        print $fh "\nendstream";
+        $fh->print($str);
+        $self->{'Length'}{'val'} = $fh->tell - $loc + 1 if $#filts >= 0;
+        $fh->print("\nendstream");
 #        $self->{'Length'}->outobjdeep($fh);
     } elsif (defined $self->{' streamfile'})
     {
         open(DICTFH, $self->{' streamfile'}) || die "Unable to open $self->{' streamfile'}";
         binmode DICTFH;
-        print $fh "\nstream\n";
-        $loc = tell($fh);
+        $fh->print("\nstream\n");
+        $loc = $fh->tell;
         while (read(DICTFH, $str, 4096))
         {
             foreach $f (reverse @filts)
             { $str = $f->outfilt($str, 0); }
-            print $fh $str;
+            $fh->print($str);
         }
         close(DICTFH);
         $str = "";
         foreach $f (reverse @filts)
         { $str = $f->outfilt($str, 1); }
-        print $fh $str;
-        $self->{'Length'}{'val'} = tell($fh) - $loc + 1;
-        print $fh "\nendstream\n";
+        $fh->print($str);
+        $self->{'Length'}{'val'} = $fh->tell - $loc + 1;
+        $fh->print("\nendstream\n");
 #        $self->{'Length'}->outobjdeep($fh);
     }
-
-    print $fh "\nendobj\n" if $self->is_obj;
 }
 
 
@@ -166,13 +155,19 @@ variable.
 sub read_stream
 {
     my ($self, $force_memory) = @_;
-    my ($fh) = $self->{' parent'}{' INFILE'};
+    my ($fh) = $self->{' streamsrc'};
     my (@filts, $f, $last, $i, $dat);
+    my ($len) = $self->{'Length'}->fullval;
+
+    $self->{' stream'} = "";
 
     if (defined $self->{'Filter'})
     {
         foreach $f ($self->{'Filter'}->elementsof)
-        { push(@filts, {"PDF::" . $f->val}->new); }
+        {
+            my ($temp) = "Text::PDF::" . $f->val;
+            push(@filts, $temp->new());
+        }
     }
 
     $last = 0;
@@ -182,19 +177,19 @@ sub read_stream
         $self->{' streamfile'} = undef;
     }
     seek ($fh, $self->{' streamloc'}, 0);
-    for ($i = 0; $i < $self->{'Length'}; $i += 4096)
+    for ($i = 0; $i < $len; $i += 4096)
     {
-        if ($i + 4096 > $self->{'Length'})
+        if ($i + 4096 > $len)
         {
             $last = 1;
-            read($fh, $dat, $self->{'Length'} - $i);
+            read($fh, $dat, $len - $i);
         }
         else
         { read($fh, $dat, 4096); }
 
         foreach $f (@filts)
         { $dat = $f->infilt($dat, $last); }
-        if (!defined $self->{' streamfile'} && length($dat) + length($dat) > $mincache)
+        if (!$force_memory && !defined $self->{' streamfile'} && length($dat) + length($dat) > $mincache)
         {
             open (DICTFH, ">$tempbase") || next;
             binmode DICTFH;

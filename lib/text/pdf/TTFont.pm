@@ -1,8 +1,8 @@
-package PDF::TTFont;
+package Text::PDF::TTFont;
 
 =head1 NAME
 
-PDF::TTFont - Inherits from L<PDF::Dict> and represents a TrueType
+Text::PDF::TTFont - Inherits from L<Text::PDF::Dict> and represents a TrueType
 font within a PDF file.
 
 =head1 DESCRIPTION
@@ -23,13 +23,14 @@ to entries in the appropriate PDF dictionaries.
 use strict;
 use vars qw(@ISA);
 
-use PDF::Dict;
-@ISA = qw(PDF::Dict);
+use Text::PDF::Dict;
+use Text::PDF::Utils;
+@ISA = qw(Text::PDF::Dict);
 
-use TTF::Font;
+use Font::TTF::Font;
 
 
-=head2 PDF::TTFont->new($parent, $fontfname. $pdfname)
+=head2 Text::PDF::TTFont->new($parent, $fontfname. $pdfname)
 
 Creates a new font resource for the given fontfile. This includes the font
 descriptor and the font stream. The $pdfname is the name by which this font
@@ -42,70 +43,81 @@ All font resources are full PDF objects.
 sub new
 {
     my ($class, $parent, $fontname, $pdfname) = @_;
-    my ($self) = $class->SUPER::new($parent);
-    my ($f, $flags, $name, $s, $upem);
+    my ($self) = $class->SUPER::new;
+    my ($f, $flags, $name, $subf, $s, $upem);
     my ($font);
 
+    $self->{' outto'} = $parent;                    # only one host for a font
     if (ref($fontname))                             # $fontname is a font object
     { $font = $fontname; }
     else
-    { $font = TTF::Font->open($fontname) || return undef; }
+    { $font = Font::TTF::Font->open($fontname) || return undef; }
 
     $self->{' font'} = $font;
     
-    $self->{'Type'} = PDF::Name->new($parent, "Font");
-    $self->{'Subtype'} = PDF::Name->new($parent, "TrueType");
+    $self->{'Type'} = PDFName("Font");
+    $self->{'Subtype'} = PDFName("TrueType");
     $name = $font->{'name'}->read->{'strings'}[4][1][0]{0};     # Try Mac string full name first
+    $subf = $font->{'name'}{'strings'}[2][1][0]{0};
     if ($name eq "")                                            # Now Windows Unicode
     {
-        $name = $font->{'name'}[4][3][1]{1033};
+        $name = $font->{'name'}{'strings'}[4][3][1]{1033};
         $name =~ s/(.)(.)/$2/oig if ($name ne "");              # lazy 1252 conversion
+    }
+    if ($subf eq "")
+    {
+        $subf = $font->{'name'}{'strings'}[2][3][1]{1033};
+        $subf =~ s/(.)(.)/$2/oig if ($subf ne "");
     }
     return undef if ($name eq "");
     $name =~ s/\s//oig;
-    $self->{'BaseFont'} = PDF::Name->new($parent, $name);
-    $self->{'Name'} = PDF::Name->new($parent, $pdfname);
+    $name .= $subf if ($subf =~ m/^Regular$/oi);
+    $self->{'BaseFont'} = PDFName($name);
+    $self->{'Name'} = PDFName($pdfname);
     $parent->new_obj($self);
 # leave the encoding & widths, etc. until we know the glyph list
 
-    $f = PDF::Dict->new($parent);
+    $f = PDFDict();
     $parent->new_obj($f);                      # make this thing a true object
     $self->{'FontDescriptor'} = $f;
-    $f->{'Type'} = PDF::Name->new($parent, "FontDescriptor");
+    $f->{'Type'} = PDFName("FontDescriptor");
     $upem = $font->{'head'}->read->{'unitsPerEm'};
-    $f->{'Ascent'} = PDF::Number->new($parent, int($font->{'hhea'}->read->{'Ascender'} * 1000 / $upem));
-    $f->{'Descent'} = PDF::Number->new($parent, int($font->{'hhea'}{'Descender'} * 1000 / $upem));
+    $f->{'Ascent'} = PDFNum(int($font->{'hhea'}->read->{'Ascender'} * 1000 / $upem));
+    $f->{'Descent'} = PDFNum(int($font->{'hhea'}{'Descender'} * 1000 / $upem));
 
 # find the top of an H or the null box! Or maybe we should just duck and say 0?
-    $f->{'CapHeight'} = PDF::Number->new($parent, 
-            int($font->{'loca'}->read->{'glyphs'}[$font->{'post'}{'STRINGS'}{"H"}]->read->{'yMax'}
-            * 1000 / $upem));
-    $f->{'StemV'} = PDF::Number->new($parent, 0);                       # no way!
-    $f->{'FontName'} = PDF::Name->new($parent, $name);
-    $f->{'ItalicAngle'} = PDF::Number->new($parent, $font->{'post'}->read->{'italicAngle'});
-    $f->{'FontBBox'} = PDF::Array->new($parent,
-            PDF::Number->new($parent, int($font->{'head'}{'xMin'} * 1000 / $upem)),
-            PDF::Number->new($parent, int($font->{'head'}{'yMin'} * 1000 / $upem)),
-            PDF::Number->new($parent, int($font->{'head'}{'xMax'} * 1000 / $upem)),
-            PDF::Number->new($parent, int($font->{'head'}{'yMax'} * 1000 / $upem)));
+    $f->{'CapHeight'} = PDFNum(0);
+#            int($font->{'loca'}->read->{'glyphs'}[$font->{'post'}{'STRINGS'}{"H"}]->read->{'yMax'}
+#            * 1000 / $upem));
+    $f->{'StemV'} = PDFNum(0);                       # no way!
+    $f->{'FontName'} = PDFName($name);
+    $f->{'ItalicAngle'} = PDFNum($font->{'post'}->read->{'italicAngle'});
+    $f->{'FontBBox'} = PDFArray(
+            PDFNum(int($font->{'head'}{'xMin'} * 1000 / $upem)),
+            PDFNum(int($font->{'head'}{'yMin'} * 1000 / $upem)),
+            PDFNum(int($font->{'head'}{'xMax'} * 1000 / $upem)),
+            PDFNum(int($font->{'head'}{'yMax'} * 1000 / $upem)));
 
+    $flags = 4;
+if (0) {
     $flags = 0;
-    $flags |= 2 if ($font->{'OS/2'}->read->{'bProportion'} == 9);
-    $flags |= 4 unless ($font->{'OS/2'}{'bSerifStyle'} > 10 && $font->{'OS/2'}{'bSerifStyle'} < 14);
-    $flags |= 8 if ($font->{'OS/2'}{'bFamilyType'} > 3);
-    $flags |= 16 if ($font->{'OS/2'}{'bFamilyType'} == 2);
-    $flags |= 128 if ($font->{'OS/2'}{'bLetterform'} > 8);
-    $f->{'Flags'} = PDF::Number->new($parent, $flags);
+    $flags |= 1 if ($font->{'OS/2'}->read->{'bProportion'} == 9);
+    $flags |= 2 unless ($font->{'OS/2'}{'bSerifStyle'} > 10 && $font->{'OS/2'}{'bSerifStyle'} < 14);
+    $flags |= 32; # if ($font->{'OS/2'}{'bFamilyType'} > 3);
+    $flags |= 8 if ($font->{'OS/2'}{'bFamilyType'} == 2);
+    $flags |= 64 if ($font->{'OS/2'}{'bLetterform'} > 8);
+}
+    $f->{'Flags'} = PDFNum($flags);
     
-    $f->{'MaxWidth'} = PDF::Number->new($parent, int($font->{'hhea'}{'advanceWidthMax'} * 1000 / $upem));
-    $f->{'MissingWidth'} = PDF::Number->new($parent, $f->{'MaxWidth'}->val + 10);
-    $f->{' notdef'} = PDF::Name->new($parent, ".notdef");
+#    $f->{'MaxWidth'} = PDFNum(int($font->{'hhea'}{'advanceWidthMax'} * 1000 / $upem));
+#    $f->{'MissingWidth'} = PDFNum($f->{'MaxWidth'}->val - 1);
+    $f->{' notdef'} = PDFNum(".notdef");
 
-    $s = PDF::Dict->new($parent);
+    $s = PDFDict();
     $parent->new_obj($s);
     $f->{'FontFile2'} = $s;
-    $s->{'Length1'} = PDF::Number->new($parent, -s $font->{' fname'});
-#    $s->{'Filter'} = PDF::Array->new($parent, PDF::Name->new($parent, "ASCII85Decode"));
+    $s->{'Length1'} = PDFNum(-s $font->{' fname'});
+    $s->{'Filter'} = PDFArray(PDFName("FlateDecode"));
     $s->{' streamfile'} = $font->{' fname'};
     
     $self;
@@ -128,7 +140,6 @@ sub add_glyphs
 {
     my ($self, $first, $ref) = @_;
     my ($last) = $first + $#{$ref};
-    my ($p) = $self->{' parent'};
     my ($i, $upem, @widths, @encs);
     my ($oldfirst, $oldlast, $font);
     my ($miss) = $self->{'FontDescriptor'}{'MissingWidth'};
@@ -153,9 +164,9 @@ sub add_glyphs
 
     unless ($self->{'Widths'} ne "")
     {
-        $self->{'Widths'} = PDF::Array->new($p);
-        $p->new_obj($self->{'Widths'});
-        $self->{'Encoding'} = PDF::Array->new($p);
+        $self->{'Widths'} = PDFArray();
+        $self->{' outto'}->new_obj($self->{'Widths'});
+        $self->{'Encoding'} = PDFArray();
     }
 
     if ($last < $oldfirst - 1)
@@ -179,10 +190,10 @@ sub add_glyphs
     for ($i = 0; $i < $last - $first; $i++)
     {
         push(@widths, defined $ref->[$i] ?
-                PDF::Number->new($p, int($font->{'hmtx'}{'advance'}[$ref->[$i]] * 1000 / $upem))
+                PDFNum(int($font->{'hmtx'}{'advance'}[$ref->[$i]] * 1000 / $upem))
                 : $miss);
         push(@encs, defined $ref->[$i] && $font->{'post'}{'VAL'}[$ref->[$i]] ne ".notdef" ?
-                PDF::Name->new($p, $font->{'post'}{'VAL'}[$ref->[$i]])
+                PDFName($font->{'post'}{'VAL'}[$ref->[$i]])
                 : $notdef);
     }
 
@@ -197,9 +208,9 @@ sub add_glyphs
     }
     $oldfirst = $first;
     $oldlast = $last;
-    unshift(@{$self->{'Encoding'}->val}, PDF::Number->new($p, $oldfirst));
-    $self->{'FirstChar'} = PDF::Number->new($p, 0) unless $self->{'FirstChar'} ne "";
-    $self->{'LastChar'} = PDF::Number->new($p, 0) unless $self->{'LastChar'} ne "";
+    unshift(@{$self->{'Encoding'}->val}, PDFNum($oldfirst));
+    $self->{'FirstChar'} = PDFNum(0) unless $self->{'FirstChar'} ne "";
+    $self->{'LastChar'} = PDFNum(0) unless $self->{'LastChar'} ne "";
     $self->{'FirstChar'}{'val'} = $oldfirst;
     $self->{'LastChar'}{'val'} = $oldlast;
     $self;
@@ -214,13 +225,13 @@ Copies the font object excluding the name, widths and encoding, etc.
 
 sub copy
 {
-    my ($self) = @_;
+    my ($self, $pdf) = @_;
     my ($res) = {};
     my ($k);
 
     bless $res, ref($self);
     foreach $k ('Name', 'Widths', 'Encoding', 'FirstChar', 'LastChar')
     { $res->{$k} = ""; }
-    return $self->SUPER::copy($res);
+    return $self->SUPER::copy($pdf, $res);
 }
 

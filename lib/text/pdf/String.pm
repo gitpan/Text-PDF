@@ -1,8 +1,8 @@
-package PDF::String;
+package Text::PDF::String;
 
 =head1 NAME
 
-PDF::String - PDF String type objects and superclass for simple objects
+Text::PDF::String - PDF String type objects and superclass for simple objects
 that are basically stringlike (Number, Name, etc.)
 
 =head1 METHODS
@@ -12,8 +12,8 @@ that are basically stringlike (Number, Name, etc.)
 use strict;
 use vars qw(@ISA %trans %out_trans);
 
-use PDF::Objind;
-@ISA = qw(PDF::Objind);
+use Text::PDF::Objind;
+@ISA = qw(Text::PDF::Objind);
 
 %trans = (
     "n" => "\n",
@@ -38,24 +38,38 @@ use PDF::Objind;
              );
 
 
-=head2 PDF::String->new($parent, $string)
+=head2 Text::PDF::String->from_pdf($string)
 
 Creates a new string object (not a full object yet) from a given string.
 The string is parsed according to input criteria with escaping working.
-Since there is no clash between an escaped and final form of a character
-in a string, strings can be passed in already converted.
+
+=cut
+
+sub from_pdf
+{
+    my ($class, $str) = @_;
+    my ($self) = {};
+
+    bless $self, $class;
+    $self->{'val'} = $self->convert($str);
+    return $self;
+}
+
+
+=head2 Text::PDF::String->new($string)
+
+Creates a new string object (not a full object yet) from a given string.
+The string is parsed according to input criteria with escaping working.
 
 =cut
 
 sub new
 {
-    my ($class, $par, $str) = @_;
-    my ($self);
+    my ($class, $str) = @_;
+    my ($self) = {};
 
-    $self->{' parent'} = $par;
-    
     bless $self, $class;
-    $self->{'val'} = $self->convert($str);
+    $self->{'val'} = $str;
     return $self;
 }
 
@@ -89,6 +103,28 @@ sub val
 { $_[0]->{'val'}; }
 
 
+=head2 $->as_pdf
+
+Returns the string formatted for output as PDF
+
+=cut
+
+sub as_pdf
+{
+    my ($self) = @_;
+    my ($str) = $self->{'val'};
+    
+    if ($str =~ m/[^\n\r\t\b\f\040-\176\200-\377]/oi)
+    {
+        $str =~ s/(.)/sprintf("%02X", ord($1))/oige;
+        return "<$str>";
+    } else
+    {
+        $str =~ s/([\n\r\t\b\f\\()])/\\$out_trans{$1}/ogi;
+        return "($str)";
+    }
+}
+
 =head2 $s->outobjdeep
 
 Outputs the string in PDF format, complete with necessary conversions
@@ -97,21 +133,8 @@ Outputs the string in PDF format, complete with necessary conversions
 
 sub outobjdeep
 {
-    my ($self, $fh) = @_;
-    my ($str) = $self->{'val'};
+    my ($self, $fh, $pdf) = @_;
 
-    $self->SUPER::outobjdeep($fh);
-
-    if ($str =~ m/[^\n\r\t\b\f\040-\176]/oi)
-    {
-        $str =~ s/./sprintf("%02X", ord($1))/oige;
-        print $fh "<$str>";
-    } else
-    {
-        $str =~ s/([\n\r\t\b\f\\()])/\\$out_trans{$1}/ogi;
-        print $fh "($str)";
-    }
-
-    print $fh "\nendobj\n" if $self->is_obj;
+    $fh->print($self->as_pdf);
 }
 

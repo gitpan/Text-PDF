@@ -1,13 +1,15 @@
-package PDF::Page;
+package Text::PDF::Page;
 
 use strict;
 use vars qw(@ISA);
-@ISA = qw(PDF::Pages);
-use PDF::Pages;
+@ISA = qw(Text::PDF::Pages);
+use Text::PDF::Pages;
+
+use Text::PDF::Utils;
 
 =head1 NAME
 
-PDF::Page - Represents a PDF page, inherits from L<PDF::Pages>
+Text::PDF::Page - Represents a PDF page, inherits from L<Text::PDF::Pages>
 
 =head1 DESCRIPTION
 
@@ -27,11 +29,9 @@ The currently open stream
 
 =head1 METHODS
 
-=head2 PDF::Page->new($parent)
+=head2 Text::PDF::Page->new($pdf, $parent)
 
-Creates a new page based on a pages object (perhaps the root object). Notice
-that here $parent is not the file context but the parent pages object. The
-file context is stored, as normal, in the ' parent' field.
+Creates a new page based on a pages object (perhaps the root object).
 
 The page is also added to the parent at this point, so pages are ordered in
 a PDF document in the order in which they are created rather than in the order
@@ -44,14 +44,14 @@ are either optional or can be inherited.
 
 sub new
 {
-    my ($class, $parent) = @_;
-    my ($pere) = $parent->{' parent'};
-    my ($self) = {' parent' => $pere};
+    my ($class, $pdf, $parent) = @_;
+    my ($self) = {};
 
     bless $self, $class;
-    $self->{'Type'} = PDF::Name->new($pere, "Page");
+    $self->{'Type'} = PDFName('Page');
     $self->{'Parent'} = $parent;
-    $pere->new_obj($self);
+    $self->{' outto'} = [$pdf];
+    $pdf->new_obj($self);
     $parent->add_page($self);
     $self;
 }
@@ -74,10 +74,10 @@ sub add
 
     if (!defined $strm)
     {
-        $strm = PDF::Dict->new($self->{' parent'});
-        $self->{' parent'}->new_obj($strm);
-        $self->{'Contents'} = PDF::Array->new($self->{' parent'})
-                unless defined $self->{'Contents'};
+        $strm = Text::PDF::Dict->new;
+        foreach (@{$self->{' outto'}})
+        { $_->new_obj($strm); }
+        $self->{'Contents'} = PDFArray() unless defined $self->{'Contents'};
         $self->{'Contents'}->add_elements($strm);
         $self->{' curstrm'} = $strm;
     }

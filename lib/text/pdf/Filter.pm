@@ -1,4 +1,4 @@
-package PDF::Filter;
+package Text::PDF::Filter;
 
 =head1 NAME
 
@@ -6,7 +6,7 @@ PDF::Filter - Abstract superclass for PDF stream filters
 
 =head1 SYNOPSIS
 
-    $f = PDF::Filter->new;
+    $f = Text::PDF::Filter->new;
     $str = $f->outfilt($str, 1);
     print OUTFILE $str;
     
@@ -27,7 +27,7 @@ the same time.
 
 =head1 METHODS
 
-=head2 PDF::Filter->new
+=head2 Text::PDF::Filter->new
 
 Creates a new filter object with empty state information ready for processing
 data both input and output.
@@ -60,16 +60,16 @@ sub new
 
 
 
-package PDF::ASCII85Decode;
+package Text::PDF::ASCII85Decode;
 
 use strict;
 use vars qw(@ISA);
-@ISA = qw(PDF::Filter);
+@ISA = qw(Text::PDF::Filter);
 
 =head1 NAME
 
-PDF::ASCII85Decode - Ascii85 filter for PDF streams. Inherits from
-L<PDF::Filter>
+Text::PDF::ASCII85Decode - Ascii85 filter for PDF streams. Inherits from
+L<Text::PDF::Filter>
 
 =cut
 
@@ -149,16 +149,16 @@ sub infilt
 
 
 
-package PDF::RunLengthDecode;
+package Text::PDF::RunLengthDecode;
 
 use strict;
 use vars qw(@ISA);
-@ISA = qw(PDF::Filter);
+@ISA = qw(Text::PDF::Filter);
 
 =head1 NAME
 
-PDF::RunLengthDecode - Run Length encoding filter for PDF streams. Inherits from
-L<PDF::Filter>
+Text::PDF::RunLengthDecode - Run Length encoding filter for PDF streams. Inherits from
+L<Text::PDF::Filter>
 
 =cut
 
@@ -238,16 +238,16 @@ sub infilt
 
 
 
-package PDF::ASCIIHexDecode;
+package Text::PDF::ASCIIHexDecode;
 
 use strict;
 use vars qw(@ISA);
-@ISA = qw(PDF::Filter);
+@ISA = qw(Text::PDF::Filter);
 
 =head1 NAME
 
-PDF::ASCIIHexDecode - Ascii Hex encoding (very inefficient) for PDF streams.
-Inherits from L<PDF::Filter>
+Text::PDF::ASCIIHexDecode - Ascii Hex encoding (very inefficient) for PDF streams.
+Inherits from L<Text::PDF::Filter>
 
 =cut
 
@@ -271,14 +271,14 @@ sub infilt
     $str;
 }
 
-package PDF::FlateDecode;
+package Text::PDF::FlateDecode;
 
 use strict;
 use vars qw(@ISA $havezlib);
-@ISA = qw(PDF::Filter);
+@ISA = qw(Text::PDF::Filter);
 BEGIN
 {
-    eval {require Compress::Zlib;};
+    eval {require "Compress/Zlib.pm";};
     $havezlib = !$@;
 }
 
@@ -288,8 +288,8 @@ sub new
     my ($class) = @_;
     my ($self) = {};
 
-    $self->{'outfilt'} = deflateInit();
-    $self->{'infilt'} = inflateInit();
+    $self->{'outfilt'} = Compress::Zlib::deflateInit();
+    $self->{'infilt'} = Compress::Zlib::inflateInit();
     bless $self, $class;
 }
 
@@ -304,6 +304,11 @@ sub outfilt
 }
 
 sub infilt
-{ $_[0]{'infilt'}->inflate($_[1]); }
+{
+    my ($self, $dat, $last) = @_;
+    my ($res, $status) = $self->{'infilt'}->inflate("$dat");
+    $res;
+}
 
+1;
 

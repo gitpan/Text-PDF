@@ -1,14 +1,14 @@
-package PDF::Name;
+package Text::PDF::Name;
 
 use strict;
 use vars qw(@ISA);
 
-use PDF::String;
-@ISA = qw(PDF::String);
+use Text::PDF::String;
+@ISA = qw(Text::PDF::String);
 
 =head1 NAME
 
-PDF::Name - Inherits from L<PDF::String> and stores PDF names (things
+Text::PDF::Name - Inherits from L<Text::PDF::String> and stores PDF names (things
 beginning with /)
 
 =head1 METHODS
@@ -29,26 +29,18 @@ sub convert
 }
 
 
-=head2 $n->outobjdeep
+=head2 as_pdf
 
-Converts a string form of a name into PDF format
+Returns a name formatted as PDF
 
 =cut
 
-sub outobjdeep
+sub as_pdf
 {
-    my ($self, $fh) = @_;
+    my ($self) = @_;
     my ($str) = $self->{'val'};
     
-    if ($self->is_obj)
-    {
-        $self->{' loc'} = tell($fh);
-        print $fh "$self->{' objnum'} $self->{' objgen'} obj\n";
-    }
-
     $str =~ s|([\000-\020%()\[\]{}<>#/])|"#".sprintf("%02X", ord($1))|oige;
-    print $fh "/" . $str;
-
-    print $fh "\nendobj\n" if $self->is_obj;
+    return ("/" . $str);
 }
 

@@ -1,12 +1,12 @@
-package PDF::File;
+package Text::PDF::File;
 
 =head1 NAME
 
-PDF::File - Holds the trailers and cross-reference tables for a PDF file
+Text::PDF::File - Holds the trailers and cross-reference tables for a PDF file
 
 =head1 SYNOPSIS
 
- $p = PDF::File->open("filename.pdf", 1);
+ $p = Text::PDF::File->open("filename.pdf", 1);
  $p->newobj($obj_ref);
  $p->freeobj($obj_ref);
  $p->appendfile;
@@ -29,7 +29,7 @@ from content variables (which may come from the PDF content itself), each such
 variable will start with a space.
 
 Variables which do not start with a space directly reflect elements in a PDF
-dictionary. In the case of a PDF::File, the elements reflect those in the
+dictionary. In the case of a Text::PDF::File, the elements reflect those in the
 trailer dictionary.
 
 Since some variables are not designed for class users to access, variables are
@@ -50,11 +50,13 @@ a PDF level object and not just to a dictionary which does not have object statu
 
 =item INFILE (R)
 
-Contains the filehandle used to read this information into this PDF directory.
+Contains the filehandle used to read this information into this PDF directory. Is
+an IO object.
 
 =item fname (R)
 
-This is the filename which is reflected by INFILE.
+This is the filename which is reflected by INFILE, or the original IO object passed
+in.
 
 =item update (R)
 
@@ -122,28 +124,31 @@ is in PDF which contains the location of the previous cross-reference table.
 
 use strict;
 no strict "refs";
-use vars qw($cr %types $version);
-use Symbol();
+use vars qw($cr %types $VERSION);
+
+use IO::File;
 
 # Now for the basic PDF types
-use PDF::Array;
-use PDF::Bool;
-use PDF::Dict;
-use PDF::Name;
-use PDF::Number;
-use PDF::Objind;
-use PDF::String;
+use Text::PDF::Utils;
 
-$version = "1.001";     # MJPH  13-OCT-1998     Return objind from read_obj
+use Text::PDF::Array;
+use Text::PDF::Bool;
+use Text::PDF::Dict;
+use Text::PDF::Name;
+use Text::PDF::Number;
+use Text::PDF::Objind;
+use Text::PDF::String;
+
+$VERSION = "0.02";     # MJPH  30-JUN-1999     Transfer from old library
 
 BEGIN
 {
     my ($t, $type);
     
-    $cr = '\s*(?:\r|\n|(?:\r\n))';
+    $cr = '\s*(?:\015|\012|(?:\015\012))';
     %types = (
-            'Page' => 'PDF::Page',
-            'Pages' => 'PDF::Pages'
+            'Page' => 'Text::PDF::Page',
+            'Pages' => 'Text::PDF::Pages'
     );
     
     foreach $type (keys %types)
@@ -155,7 +160,7 @@ BEGIN
 }
             
 
-=head2 PDF::File->new
+=head2 Text::PDF::File->new
 
 Creates a new, empty file object which can act as the host to other PDF objects.
 Since there is no file associated with this object, it is assumed that the
@@ -169,15 +174,15 @@ sub new
     my ($self) = $class->_new;
     my ($root);
 
-    $root = PDF::Dict->new($self);
-    $root->{'Type'} = PDF::Name->new($self, "Catalog");
+    $root = PDFDict();
+    $root->{'Type'} = PDFName("Catalog");
     $self->new_obj($root);
     $self->{'Root'} = $root;
     $self;
 }
 
 
-=head2 $p = PDF::File->open($filename, $update)
+=head2 $p = Text::PDF::File->open($filename, $update)
 
 Opens the file and reads all the trailers and cross reference tables to build
 a complete directory of objects.
@@ -185,30 +190,34 @@ a complete directory of objects.
 $update specifies whether this file is being opened for updating and editing,
 or simply to be read.
 
+$filename may be an IO object
+
 =cut
 
 sub open
 {
     my ($class, $fname, $update) = @_;
     my ($self, $buf, $xpos, $end, $tdict, $k);
-    my ($fh) = Symbol->gensym();
+    my ($fh);
 
     $self = $class->_new;
-    $self->{' INFILE'} = $fh;
-    $self->{' fname'} = $fname;
-    $self->{' update'} = $update;
-    open ($fh, ($update ? "+" : "") . "<$fname")
-            || die "Can't ". ($update ? "update" : "read") . " $fname";
-    binmode $fh;
-    read($fh, $buf, 255);
-    if ($buf !~ m/^\%pdf\-1\.[0-2]\s*$cr/moi)
-    { die "$fname not a PDF file version 1.0-1.2"; }
+    if (ref $fname)
+    { $self->{' INFILE'} = $fname; }
+    else
+    {
+        $fh = IO::File->new(($update ? "+" : "") . "<$fname") || return undef;
+        $self->{' INFILE'} = $fh;
+        binmode $fh;
+    }
+    $fh->read($buf, 255);
+    if ($buf !~ m/^\%pdf\-1\.[0-3]\s*$cr/moi)
+    { die "$fname not a PDF file version 1.0-1.3"; }
 
-    seek($fh, 0, 2);            # go to end of file
-    $end = tell($fh);
+    $fh->seek(0, 2);            # go to end of file
+    $end = $fh->tell();
     $self->{' epos'} = $end;
-    seek ($fh, $end - 32, 0);
-    read($fh, $buf, 32);
+    $fh->seek($end - 32, 0);
+    $fh->read($buf, 32);
     if ($buf !~ m/startxref$cr([0-9]+)$cr\%\%eof/oi)
     { die "Malformed PDF file $fname"; }
     $xpos = $1;
@@ -232,16 +241,16 @@ sub append_file
     my ($tdict, $fh);
     
     return undef unless ($self->{' update'});
-    $tdict = PDF::Dict->new($self);
-    $tdict->{'Prev'} = PDF::Number->new($self, $self->{' loc'});
+    $tdict = PDFDict();
+    $tdict->{'Prev'} = PDFNum($self->{' loc'});
     $tdict->{'Info'} = $self->{'Info'};
     if (defined $self->{' newroot'})
     { $tdict->{'Root'} = $self->{' newroot'}; }
     else
     { $tdict->{'Root'} = $self->{'Root'}; }
-    $tdict->{'Size'} = PDF::Number->new($self, $self->{'Size'}->val + $#{$self->{' outlist'}} + 1);
+    $tdict->{'Size'} = PDFNum($self->{'Size'}->val + $#{$self->{' outlist'}} + 1);
     $fh = $self->{' INFILE'};
-    seek($fh, $self->{' epos'}, 0);
+    $fh->seek($self->{' epos'}, 0);
     $self->out_trailer($fh, $tdict);
 }
 
@@ -252,28 +261,35 @@ Writes a PDF file to a file of the given filename based on the current list of
 objects to be output. It creates the trailer dictionary based on information
 in $self.
 
+$fname may be an IO object;
+
 =cut
 
 sub out_file
 {
     my ($self, $fname) = @_;
-    my ($fh) = Symbol->gensym();
-    my ($tdict);
+    my ($fh, $tdict);
 
-    open($fh, ">$fname") || die "Unable to open $fname for writing";
-    binmode $fh;
+    if (ref $fname)
+    { $fh = $fname; }
+    else
+    {
+        $fh = IO::File->new(">$fname") || die "Unable to open $fname for writing";
+        binmode $fh;
+    }
 
-    $tdict = PDF::Dict->new($self);
+    $tdict = PDFDict();
     $tdict->{'Info'} = $self->{'Info'} if defined $self->{'Info'};
     $tdict->{'Root'} = $self->{' newroot'} ne "" ? $self->{' newroot'} : $self->{'Root'};
 
 # remove all freed objects from the outlist
     @{$self->{' outlist'}} = grep(!$_->{' isfree'}, @{$self->{' outlist'}});
-    $tdict->{'Size'} = PDF::Number->new($self, $#{$self->{' outlist'}} + 2);
-    print $fh "%PDF-1.2\n";
-    print $fh "%Çì¢\n";              # and some binary stuff in a comment
+    $tdict->{'Size'} = PDFNum($#{$self->{' outlist'}} + 2);
+    $fh->print("%PDF-1." . ($self->{'Version'} || "3") . "\n");
+    $fh->print("%Çì¢\n");              # and some binary stuff in a comment
     $self->out_trailer($fh, $tdict);
     close($fh);
+    MacPerl::SetFileInfo("CARO", "TEXT", $fname) if ($^O eq "MacOS" && !ref($fname));
     $self;
 }
 
@@ -300,14 +316,14 @@ sub readval
     {
         $str = $';
         $str = update($fh, $str);
-        $res = PDF::Dict->new($self);
+        $res = PDFDict();
         while ($str !~ m/^\>\>$cr?/oi)
         {
             $str = update($fh, $str);
             if ($str =~ m|^/(\w+)$cr?|oi)
             {
                 $k = $1; $str = $';
-#                $key = PDF::Name->new($self, $k);
+#                $key = PDFName($k);
                 ($value, $str) = $self->readval($str);
                 $res->{$k} = $value;
             } else
@@ -318,10 +334,12 @@ sub readval
         }
         $str =~ s/^\>\>$cr?//oi;
         $str = update($fh, $str);
-        if ($str =~ m/^stream$cr/oi && $res->{'Length'} != 0)           # stream
+        if ($str =~ m/^stream$cr/oi && $res->{'Length'}->val != 0)           # stream
         {
             $str = $';
-            $k = $res->{'Length'};
+            $k = $res->{'Length'}->val;
+            $res->{' streamsrc'} = $fh;
+            $res->{' streamloc'} = $fh->tell - length($str);
             if ($k > length($str))
             {
                 $value = $str;
@@ -337,66 +355,80 @@ sub readval
         }
 
         bless $res, $types{$res->{'Type'}->val}
-                if (defined $res->{'Type'} && defined $types{$res->{'Type'}->val});
+                if (defined $res->{'Type'} && defined $types{$res->{'Type'}->fullval});
     } elsif ($str =~ m/^([0-9]+)\s+([0-9]+)\s+R$cr?/o)                  # objind
     {
         $k = $1;
         $value = $2;
         $str = $';
-        $res = $self->test_obj($k, $value)
-                || $self->add_obj(PDF::Objind->new($self, $k, $value));
+        unless ($res = $self->test_obj($k, $value))
+        {
+            $res = Text::PDF::Objind->new();
+            $res->{' objnum'} = $k;
+            $res->{' objgen'} = $value;
+            $res->{' parent'} = $self;
+            $self->add_obj($res, $k, $value);
+        }
     } elsif ($str =~ m/^([0-9]+)\s+([0-9]+)\s+obj$cr?/oi)               # object data
     {
+        my ($obj);
+        
         $k = $1;
         $value = $2;
         $str = $';
-        ($res, $str) = $self->readval($str);
-        $res->{' objnum'} = $k;
-        $res->{' objgen'} = $value;
+        ($obj, $str) = $self->readval($str);
+        if ($res = $self->test_obj($k, $value))
+        { $res->merge($obj); }
+        else
+        {
+            $res = $obj;
+            $self->add_obj($res, $k, $value);
+        }
     } elsif ($str =~ m|^/(\w+)$cr?|oi)                                  # name
     {
         $value = $1;
         $str = $';
-        $res = PDF::Name->new($self, $value);
+        $res = Text::PDF::Name->from_pdf($value);
     } elsif ($str =~ m/^\(/oi)                                          # string
     {
         $str = $';
-        read($fh, $str, 255, length($str)) while ($str !~ m/\)/oi);
+        $fh->read($str, 255, length($str)) while ($str !~ m/\)/oi);
         $str =~ m/\)\s*$cr?/oi;
         $value = $`;
         $str = $';
-        $res = PDF::String->new($self, $value);
+        $res = Text::PDF::String->from_pdf($value);
     } elsif ($str =~ m/^\</oi)                                          # hex-string
     {
         $str = $';
-        read($fh, $str, 255, length($str)) while ($str !~ m/\>/oi);
+        $fh->read($str, 255, length($str)) while ($str !~ m/\>/oi);
         $str =~ m/\>\s*$cr?/oi;
         $value = $`;
         $str = $';
-        $res = PDF::String->new($self, "<" . $value . ">");
+        $res = Text::PDF::String->from_pdf("<" . $value . ">");
     } elsif ($str =~ m/^\[$cr?/oi)                                      # array
     {
         $str = $';
-        $res = PDF::Array->new($self);
+        $res = PDFArray();
         while ($str !~ m/^\]$cr?/oi)
         {
             ($value, $str) = $self->readval($str);
-            push (@{$res->{' val'}}, $value);
+            $res->add_elements($value);
         }
         $str =~ s/^\]$cr?//oi;
     } elsif ($str =~ m/^((true)|(false))$cr?/oi)                        # boolean
     {
         $value = $1;
         $str = $';
-        $res = PDF::Bool->new($self, $value eq "true");
-    } elsif ($str =~ m/^([0-9]+)\s*$cr?/oi)                             # number
+        $res = Text::PDF::Bool->from_pdf($value);
+    } elsif ($str =~ m/^([+-.0-9]+)\s*$cr?/oi)                             # number
     {
         $value = $1;
         $str = $';
-        $res = PDF::Number->new($self, $value);
+        $res = Text::PDF::Number->from_pdf($value);
     }
     return ($res, $str);
 }
+
 
 =head2 $ref = $p->read_obj($objind)
 
@@ -408,23 +440,24 @@ the read in object.
 sub read_obj
 {
     my ($self, $objind) = @_;
-    my ($loc, $res, $str);
+    my ($loc, $res, $str, $oldloc);
 
-    return ($objind, $objind->{' loc'}) if defined $objind->{'obj'};
-    $loc = $self->locate_obj($objind->val);
-    seek($self->{' INFILE'}, $loc, 0);
+    return ($objind) if $self->{' objects'}{$objind->uid};
+    $loc = $self->locate_obj($objind->{' objnum'}, $objind->{' objgen'});
+    $oldloc = $self->{' INFILE'}->tell;
+    $self->{' INFILE'}->seek($loc, 0);
     ($res, $str) = $self->readval("");
+    $self->{' INFILE'}->seek($oldloc, 0);
     $objind->merge($res);
-    $objind->{' loc'} = $loc;
     return $objind;
 }
+
 
 =head2 $objind = $p->new_obj($obj)
 
 Creates a new, free object reference based on free space in the cross reference chain.
 If nothing free then thinks up a new number. If $obj then turns that object into this
 new object rather than returning a new object.
-
 
 =cut
 
@@ -434,19 +467,19 @@ sub new_obj
     my ($res);
     my ($tdict, $i, $ni, $ng);
 
-    if (defined $self->{' firstfree'})
+    if ($#{$self->{' free'}} >= 0)
     {
-        $res = $self->{' firstfree'};
-        $self->{' firstfree'} = $res->{' nextfree'};
+        $res = shift(@{$self->{' free'}});
         if (defined $base)
         {
+            my ($num, $gen) = @{$self->{' objects'}{$res->uid}};
             $self->remove_obj($res);
-            return $base->isobj($res->{' objnum'}, $res->{' objgen'});
+            $self->add_obj($base, $num, $gen);
+            return $base;
         }
         else
         {
-            $res->{' nextfree'} = undef;
-            $res->{' isfree'} = undef;
+            $self->{' objects'}{$res->uid}[2] = 0;
             return $res;
         }
     }
@@ -457,16 +490,18 @@ sub new_obj
         $i = 0;
         while ($tdict->{' xref'}{$i}[0] != 0)
         {
-            $ni = $tdict->{' xref'}{$i}[0];
-            if (!defined $self->locate_obj($ni, $tdict->{' xref'}{$ni}[1]))
+            ($ni, $ng) = @{$tdict->{' xref'}{$i}};
+            if (!defined $self->locate_obj($ni, $ng))
             {
-                $ng = $tdict->{' xref'}{$ni}[1];
                 if (defined $base)
-                { return $base->isobj($ni, $ng); }
+                {
+                    $self->add_obj($base, $ni, $ng);
+                    return $base;
+                }
                 else
                 {
                     $res = $self->test_obj($ni, $ng)
-                            || $self->add_obj(PDF::Objind->new($self, $ni, $ng));
+                            || $self->add_obj(Text::PDF::Objind->new(), $ni, $ng);
                     $tdict->{' xref'}{$i}[0] = $tdict->{' xref'}{$ni}[0];
                     $self->out_obj($res);
                     return $res;
@@ -479,14 +514,19 @@ sub new_obj
 
     $i = $self->{' maxobj'}++;
     if (defined $base)
-    { return $base->isobj($i, 0); }
+    {
+        $self->add_obj($base, $i, 0);
+        $self->out_obj($base);
+        return $base;
+    }
     else
     {
-        $res = $self->add_obj(PDF::Objind->new($self, $i, 0));
+        $res = $self->add_obj(PDF::Objind->new(), $i, 0);
         $self->out_obj($res);
-        return $self->add_obj($res);
+        return $res;
     }
 }
+
 
 =head2 $p->free_obj($objind)
 
@@ -498,14 +538,8 @@ sub free_obj
 {
     my ($self, $obj) = @_;
 
-    if (!defined $self->{' firstfree'})
-    { $self->{' firstfree'} = $self->{' lastfree'} = $obj; }
-    else
-    {
-        $self->{' lastfree'}{' nextfree'} = $obj;
-        $self->{' lastfree'} = $obj;
-    }
-    $obj->{' isfree'} = 1;
+    push(@{$self->{' free'}}, $obj);
+    $self->{' objects'}{$obj->uid}[2] = 1;
     $self->out_obj($obj);
 }
 
@@ -521,6 +555,7 @@ sub remove_obj
     my ($self, $objind) = @_;
 
 # who says it has to be fast
+    delete $self->{' objects'}{$objind->uid};
     @{$self->{' outlist'}} = grep($_ ne $objind, @{$self->{' outlist'}});
     $self->{' objcache'}{$objind->{' objnum'}, $objind->{' objgen'}} = undef
             if ($self->{' objcache'}{$objind->{' objnum'}, $objind->{' objgen'}} eq $objind);
@@ -575,9 +610,9 @@ sub update
 {
     my ($fh, $str) = @_;
 
-    read($fh, $str, 255, length($str)) while $str !~ m/$cr/oi;
+    $fh->read($str, 255, length($str)) while $str !~ m/$cr/oi;
     while ($str =~ /^\s*\%(.*?)$cr/oi)
-    { $str = $'; read($fh, $str, 255, length($str)) while $str !~ m/$cr/oi; }
+    { $str = $'; $fh->read($str, 255, length($str)) while $str !~ m/$cr/oi; }
     $str;
 }
 
@@ -616,10 +651,10 @@ Adds the given object to the internal object cache.
 
 sub add_obj
 {
-    my ($self, $obj) = @_;
-    my ($num, $gen) = ($obj->{' objnum'}, $obj->{' objgen'});
+    my ($self, $obj, $num, $gen) = @_;
 
     $self->{' objcache'}{$num, $gen} = $obj;
+    $self->{' objects'}{$obj->uid} = [$num, $gen];
     return $obj;
 }
 
@@ -646,8 +681,8 @@ sub readxrtr
     my ($tdict, $xlist, $buf, $xmin, $xnum, $fh, $xdiff);
 
     $fh = $self->{' INFILE'};
-    seek ($fh, $xpos, 0);
-    read($fh, $buf, 22);
+    $fh->seek($xpos, 0);
+    $fh->read($buf, 22);
     if ($buf !~ m/^xref$cr/oi)
     { die "Malformed xref in PDF file $self->{' fname'}"; }
     $buf = $';
@@ -660,13 +695,13 @@ sub readxrtr
         $buf = $';
         $xdiff = length($buf);
         
-        read($fh, $buf, 20 * $xnum - $xdiff + 15, $xdiff);
+        $fh->read($buf, 20 * $xnum - $xdiff + 15, $xdiff);
         while ($xnum-- > 0 && $buf =~ s/^0*([0-9]*)\s+0*([0-9]+)\s+(\S)$cr//oi)
         { $xlist->{$xmin++} = [$1, $2, $3]; }
     }
 
     if ($buf !~ /^trailer$cr/oi)
-    { die "Malformed trailer in PDF file $self->{' fname'} at " . (tell($fh) - length($buf)); }
+    { die "Malformed trailer in PDF file $self->{' fname'} at " . ($fh->tell - length($buf)); }
 
     $buf = $';
 
@@ -691,52 +726,74 @@ freed ones. It then outputs the trailing dictionary and the trailer code.
 sub out_trailer
 {
     my ($self, $fh, $tdict) = @_;
-    my ($objind, $j, $i, $iend, @xreflist, $first, $ff);
+    my ($objind, $j, $i, $iend, @xreflist, $first, $k, $xref, $tloc, @freelist);
+    my (%locs);
     my ($size) = $#{$self->{' outlist'}};
     
     foreach $objind (@{$self->{' outlist'}})
-    { $objind->outobjdeep($fh) unless ($objind->{' isfree'}); }
+    {
+        next if ($self->{' objects'}{$objind->uid}[2]);
+        $locs{$objind->uid} = $fh->tell;
+        $fh->printf("%d %d obj\n", @{$self->{' objects'}{$objind->uid}}[0..1]);
+        $objind->outobjdeep($fh, $self);
+        $fh->print("\nendobj\n");
+    }
     if ($#{$self->{' outlist'}} > $size)
-    { $tdict->{'Size'}{'val'} += $#{$self->{' outlist'}} - $size; }
-    $tdict->{' loc'} = tell($fh);
-    print $fh "xref\n";
+    { $tdict->{'Size'} = PDFNum($tdict->{'Size'}->val + $#{$self->{' outlist'}} - $size); }
 
-    @xreflist = sort byobjnum @{$self->{' outlist'}};
+    $tloc = $fh->tell;
+    $fh->print("xref\n");
 
-    $j = 0; $first = -1;
-    $ff = defined $self->{' firstfree'} ? $self->{' firstfree'}{' objnum'} : 0;
+    @xreflist = sort {$self->{' objects'}{$a->uid}[0] <=>
+                $self->{' objects'}{$b->uid}[0]} @{$self->{' outlist'}};
+    @freelist = sort {$self->{' objects'}{$a->uid}[0] <=>
+                $self->{' objects'}{$b->uid}[0]} @{$self->{' free'}};
+
+    $j = 0; $first = -1; $k = 0;
     for ($i = 0; $i <= $#xreflist + 1; $i++)
     {
 #        if ($i == 0)
 #        {
 #            $first = $i; $j = $xreflist[0]->{' objnum'};
-#            printf $fh "0 1\n%010d 65535 f \n", $ff;
+#            $fh->printf("0 1\n%010d 65535 f \n", $ff);
 #        }
-        if ($i > $#xreflist || $xreflist[$i]->{' objnum'} != $j + 1)
+        if ($i > $#xreflist || $self->{' objects'}{$xreflist[$i]->uid}[0] != $j + 1)
         {
-            print $fh ($first == -1 ? "0 " : "$xreflist[$first]->{' objnum'} ") . ($i - $first) . "\n";
+            $fh->print(($first == -1 ? "0 " : "$xreflist[$first]->{' objnum'} ") . ($i - $first) . "\n");
             if ($first == -1)
             {
-                printf $fh "%010d 65535 f \n", $ff;
+                $fh->printf("%010d 65535 f \n", $freelist[$k]);
                 $first = 0;
             }
             for ($j = $first; $j < $i; $j++)
-            { $xreflist[$j]->outxref($fh); }
+            {
+                $xref = $xreflist[$j];
+                if ($freelist[$k] eq $xref)
+                {
+                    $k++;
+                    $fh->print(pack("A10AA5A4",
+                            sprintf("%010d", $self->{' objects'}{$freelist[$k]->uid}[0]), " ",
+                            sprintf("%05d", $self->{' objects'}{$xref->uid}[1] + 1),
+                            " f \n"));
+                } else
+                {
+                    $fh->print(pack("A10AA5A4", sprintf("%010d", $locs{$xref->uid}), " ",
+                            sprintf("%05d", $self->{' objects'}{$xref->uid}[1]),
+                            " n \n"));
+                }
+            }
             $first = $i;
-            $j = $xreflist[$i]->{' objnum'} if ($i <= $#xreflist);
+            $j = $self->{' objects'}{$xreflist[$i]->uid}[0] if ($i <= $#xreflist);
         } else
         { $j++; }
     }
-    print $fh "trailer\n";
-    $tdict->outobjdeep($fh);
-    print $fh "\nstartxref\n$tdict->{' loc'}\n" . '%%EOF' . "\n";
+    $fh->print("trailer\n");
+    $tdict->outobjdeep($fh, $self);
+    $fh->print("\nstartxref\n$tloc\n" . '%%EOF' . "\n");
 }
 
-sub byobjnum
-{ $a->{' objnum'} <=> $b->{' objnum'}; }
 
-
-=head2 PDF::File->_new
+=head2 Text::PDF::File->_new
 
 Creates a very empty PDF file object (used by new and open)
 
@@ -751,6 +808,7 @@ sub _new
     $self->{' outlist'} = [];
     $self->{' maxobj'} = 1;
     $self->{' objcache'} = {};
+    $self->{' objects'} = {};
     $self;
 }
 

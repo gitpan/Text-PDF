@@ -1,14 +1,14 @@
-package PDF::Array;
+package Text::PDF::Array;
 
 use strict;
 use vars qw(@ISA);
 
-use PDF::Objind;
-@ISA = qw(PDF::Objind);
+use Text::PDF::Objind;
+@ISA = qw(Text::PDF::Objind);
 
 =head1 NAME
 
-PDF::Array - Corresponds to a PDF array. Inherits from L<PDF::Objind>
+Text::PDF::Array - Corresponds to a PDF array. Inherits from L<PDF::Objind>
 
 =head1 INSTANCE VARIABLES
 
@@ -31,16 +31,15 @@ initialise the array with.
 
 sub new
 {
-    my ($class, $par, @vals) = @_;
+    my ($class, @vals) = @_;
     my ($self);
 
-    $self->{' parent'} = $par;
     $self->{' val'} = [@vals];
     bless $self, $class;
 }
 
 
-=head2 $a->outobjdeep($fh)
+=head2 $a->outobjdeep($fh, $pdf)
 
 Outputs an array as a PDF array to the given filehandle.
 
@@ -48,20 +47,16 @@ Outputs an array as a PDF array to the given filehandle.
 
 sub outobjdeep
 {
-    my ($self, $fh) = @_;
+    my ($self, $fh, $pdf) = @_;
     my ($obj);
 
-    $self->SUPER::outobjdeep($fh);
-
-    print $fh "[ ";
+    $fh->print("[ ");
     foreach $obj (@{$self->{' val'}})
     {
-        $obj->outobj($fh);
-        print $fh " ";
+        $obj->outobj($fh, $pdf);
+        $fh->print(" ");
     }
-    print $fh "]";
-
-    print $fh "\nendobj\n" if $self->is_obj;
+    $fh->print("]");
 }
 
 
@@ -119,27 +114,30 @@ sub val
 { $_[0]->{' val'}; }
 
 
-=head2 $a->copy
+=head2 $a->copy($pdf)
 
 Copies the array with deep-copy on elements which are not full PDF objects
+with respect to a particular $pdf output context
 
 =cut
 
 sub copy
 {
-    my ($self) = @_;
-    my ($res) = $self->SUPER::copy;
+    my ($self, $pdf) = @_;
+    my ($res) = $self->SUPER::copy($pdf);
     my ($e);
 
     $res->{' val'} = [];
     foreach $e (@{$self->{' val'}})
     {
-        if (UNIVERSAL::can($e, "is_obj") && !$e->is_obj)
-        { push(@{$res->{' val'}}, $e->copy); }
+        if (UNIVERSAL::can($e, "is_obj") && !$e->is_obj($pdf))
+        { push(@{$res->{' val'}}, $e->copy($pdf)); }
         else
         { push(@{$res->{' val'}}, $e); }
     }
     $res;
 }
+
+1;
 
 
