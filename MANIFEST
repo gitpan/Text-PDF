@@ -3,7 +3,7 @@ Makefile.PL
 lib/Text/PDF/Array.pm
 lib/Text/PDF/Bool.pm
 lib/Text/PDF/Dict.pm
-lib/Text/PDF/FILE.PM
+lib/Text/PDF/File.pm
 lib/Text/PDF/Filter.pm
 lib/Text/PDF/Name.pm
 lib/Text/PDF/Number.pm
