@@ -99,14 +99,12 @@ sub new
             PDFNum(int($font->{'head'}{'yMax'} * 1000 / $upem)));
 
     $flags = 4;
-if (0) {
     $flags = 0;
     $flags |= 1 if ($font->{'OS/2'}->read->{'bProportion'} == 9);
     $flags |= 2 unless ($font->{'OS/2'}{'bSerifStyle'} > 10 && $font->{'OS/2'}{'bSerifStyle'} < 14);
     $flags |= 32; # if ($font->{'OS/2'}{'bFamilyType'} > 3);
     $flags |= 8 if ($font->{'OS/2'}{'bFamilyType'} == 2);
     $flags |= 64 if ($font->{'OS/2'}{'bLetterform'} > 8);
-}
     $f->{'Flags'} = PDFNum($flags);
     
 #    $f->{'MaxWidth'} = PDFNum(int($font->{'hhea'}{'advanceWidthMax'} * 1000 / $upem));

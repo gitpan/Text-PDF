@@ -24,6 +24,7 @@ use strict;
 use vars qw(@ISA);
 
 use Text::PDF::TTFont;
+use Text::PDF::Dict;
 @ISA = qw(Text::PDF::TTFont);
 
 use Font::TTF::Font;
@@ -51,7 +52,7 @@ sub new
     $self->{'Subtype'} = PDFName('Type0');
     $self->{'Encoding'} = PDFName('Identity-H');
 
-    $parent->{'Version'} = 3;
+    $parent->{'Version'} = 3 unless $parent->{'Version'} > 3;
     $desc = PDFDict();
     $parent->new_obj($desc);
     $desc->{'Type'} = $self->{'Type'};
@@ -127,6 +128,21 @@ sub new
         $self->{'ToUnicode'} = $touni;
     }
     
+    $self;
+}
+
+=head2 outobjdeep($fh, $pdf)
+
+Handles the creation of the font stream including subsetting at this point. So
+if you get this far, that's it for subsetting.
+
+=cut
+
+sub outobjdeep
+{
+    my ($self, $fh, $pdf) = @_;
+
+    $self->SUPER::outobjdeep($fh, $pdf);
     $self;
 }
 

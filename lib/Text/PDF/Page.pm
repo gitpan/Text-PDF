@@ -29,7 +29,7 @@ The currently open stream
 
 =head1 METHODS
 
-=head2 Text::PDF::Page->new($pdf, $parent)
+=head2 Text::PDF::Page->new($pdf, $parent, $index)
 
 Creates a new page based on a pages object (perhaps the root object).
 
@@ -40,11 +40,14 @@ they are closed.
 Only the essential elements in the page dictionary are created here, all others
 are either optional or can be inherited.
 
+The optional index value indicates the index in the parent list that this page
+should be inserted (so that new pages need not be appended)
+
 =cut
 
 sub new
 {
-    my ($class, $pdf, $parent) = @_;
+    my ($class, $pdf, $parent, $index) = @_;
     my ($self) = {};
 
     bless $self, $class;
@@ -52,7 +55,7 @@ sub new
     $self->{'Parent'} = $parent;
     $self->{' outto'} = [$pdf];
     $pdf->new_obj($self);
-    $parent->add_page($self);
+    $parent->add_page($self, $index);
     $self;
 }
 

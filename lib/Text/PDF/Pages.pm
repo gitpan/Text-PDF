@@ -44,18 +44,23 @@ sub new
 }
 
 
-=head2 $p->add_page($page)
+=head2 $p->add_page($page, $index)
 
-Adds a page to this pages object.
+Appends a page to this pages object or if defined $index then inserts the page
+at that index in the elements array of this pages object (note that does not
+equal the page number)
 
 =cut
 
 sub add_page
 {
-    my ($self, $page) = @_;
+    my ($self, $page, $index) = @_;
 
     $self->{'Count'}{'val'}++;
-    $self->{'Kids'}->add_elements($page);
+    if (defined $index)
+    { splice(@{$self->{'Kids'}->val}, $index, 0, $page); }
+    else
+    { $self->{'Kids'}->add_elements($page); }
     $self;
 }
 
@@ -96,7 +101,8 @@ sub add_font
 =head2 $p->bbox($xmin, $ymin, $xmax, $ymax, [$param])
 
 Specifies the bounding box for this and all child pages. If the values are
-identical to those inherited then no change is made.
+identical to those inherited then no change is made. $param specifies the attribute
+name so that other 'bounding box'es can be set with this method.
 
 =cut
 

@@ -7,10 +7,9 @@ Text::PDF::File - Holds the trailers and cross-reference tables for a PDF file
 =head1 SYNOPSIS
 
  $p = Text::PDF::File->open("filename.pdf", 1);
- $p->newobj($obj_ref);
- $p->freeobj($obj_ref);
- $p->appendfile;
- $p->addchanges;
+ $p->new_obj($obj_ref);
+ $p->free_obj($obj_ref);
+ $p->append_file;
  $p->close;
 
 =head1 DESCRIPTION
@@ -139,11 +138,12 @@ use Text::PDF::Number;
 use Text::PDF::Objind;
 use Text::PDF::String;
 
-$VERSION = "0.06";      # MJPH  11-SEP-1999   Sort out unixisms
+$VERSION = "0.07";      # MJPH  01-DEC-1999     Debug for pdfbklt
+#$VERSION = "0.06";      # MJPH  11-SEP-1999     Sort out unixisms
 #$VERSION = "0.05";      # MJPH   9-SEP-1999     Add ship_out
 #$VERSION = "0.04";      # MJPH  14-JUL-1999     Correct paths for tarball release
 #$VERSION = "0.03";      # MJPH  14-JUL-1999     Correct paths for tarball release
-#$VERSION = "0.02";     # MJPH  30-JUN-1999     Transfer from old library
+#$VERSION = "0.02";     # MJPH  30-JUN-1999      Transfer from old library
 
 BEGIN
 {
@@ -212,6 +212,11 @@ sub open
         $fh = IO::File->new(($update ? "+" : "") . "<$fname") || return undef;
         $self->{' INFILE'} = $fh;
         binmode $fh;
+        if ($update)
+        {
+            $self->{' update'} = 1;
+            $self->{' OUTFILE'} = $fh;
+        }
     }
     $fh->read($buf, 255);
     if ($buf !~ m/^\%pdf\-1\.[0-3]\s*$cr/moi)
@@ -255,7 +260,7 @@ sub append_file
     $tdict->{'Size'} = $self->{'Size'};
     $fh = $self->{' INFILE'};
     $fh->seek($self->{' epos'}, 0);
-    $self->out_trailer($fh, $tdict);
+    $self->out_trailer($tdict);
 }
 
 
@@ -394,7 +399,7 @@ sub readval
         }
 
         bless $res, $types{$res->{'Type'}->val}
-                if (defined $res->{'Type'} && defined $types{$res->{'Type'}->fullval});
+                if (defined $res->{'Type'} && defined $types{$res->{'Type'}->val});
     } elsif ($str =~ m/^([0-9]+)\s+([0-9]+)\s+R$cr?/o)                  # objind
     {
         $k = $1;
@@ -514,7 +519,7 @@ sub new_obj
             my ($num, $gen) = @{$self->{' objects'}{$res->uid}};
             $self->remove_obj($res);
             $self->add_obj($base, $num, $gen);
-            return $base;
+            return $self->out_obj($base);
         }
         else
         {
@@ -560,10 +565,26 @@ sub new_obj
     }
     else
     {
-        $res = $self->add_obj(PDF::Objind->new(), $i, 0);
+        $res = $self->add_obj(Text::PDF::Objind->new(), $i, 0);
         $self->out_obj($res);
         return $res;
     }
+}
+
+
+=head2 $p->out_obj($objind)
+
+Indicates that the given object reference should appear in the output xref
+table whether with data or freed.
+
+=cut
+
+sub out_obj
+{
+    my ($self, $obj) = @_;
+
+    push (@{$self->{' outlist'}}, $obj) unless (grep($_ eq $obj, @{$self->{' outlist'}}));
+    $obj;
 }
 
 
@@ -697,21 +718,6 @@ sub update
 }
 
 
-=head2 $p->out_obj($objind)
-
-Indicates that the given object reference should appear in the output xref
-table whether with data or freed.
-
-=cut
-
-sub out_obj
-{
-    my ($self, $obj) = @_;
-
-    push (@{$self->{' outlist'}}, $obj) unless (grep($_ eq $obj, @{$self->{' outlist'}}));
-}
-
-
 =head2 $objind = $p->test_obj($num, $gen)
 
 Tests the cache to see whether an object reference (which may or may not have
@@ -795,7 +801,7 @@ sub readxrtr
 }
 
 
-=head2 $p->out_trailer($fh, $tdict)
+=head2 $p->out_trailer($tdict)
 
 Outputs the body and trailer for a PDF file by outputting all the objects in
 the ' outlist' and then outputting a xref table for those objects and any
@@ -846,17 +852,18 @@ sub out_trailer
             $fh->print(($first == -1 ? "0 " : "$self->{' objects'}{$xreflist[$first]->uid}[0] ") . ($i - $first) . "\n");
             if ($first == -1)
             {
-                $fh->printf("%010d 65535 f \n", $freelist[$k]);
+                $fh->printf("%010d 65535 f \n", defined $freelist[$k] ? $self->{' objects'}{$freelist[$k]->uid}[0] : 0);
                 $first = 0;
             }
             for ($j = $first; $j < $i; $j++)
             {
                 $xref = $xreflist[$j];
-                if ($freelist[$k] eq $xref)
+                if ("$freelist[$k]" eq "$xref")
                 {
                     $k++;
                     $fh->print(pack("A10AA5A4",
-                            sprintf("%010d", $self->{' objects'}{$freelist[$k]->uid}[0]), " ",
+                            sprintf("%010d", (defined $freelist[$k] ?
+                                    $self->{' objects'}{$freelist[$k]->uid}[0] : 0)), " ",
                             sprintf("%05d", $self->{' objects'}{$xref->uid}[1] + 1),
                             " f \n"));
                 } else

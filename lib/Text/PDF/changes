@@ -1,0 +1,11 @@
+* 0.5
+Lots of changes and introduction of this document
+
+** SFont
+    Remove dependence upon Font::Metrics, introduce dependence on 
+    Compress::Zlib, which is more likely to be available.
+    Store width tables in class
+
+** File
+    Restructure saving a lot to allow incremental output with emptying
+

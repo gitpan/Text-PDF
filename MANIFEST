@@ -15,4 +15,8 @@ lib/Text/PDF/String.pm
 lib/Text/PDF/TTFont.pm
 lib/Text/PDF/TTFont0.pm
 lib/Text/PDF/Utils.pm
+lib/Text/PDF/changes
 readme.txt
+scripts/pdfaddpg.plx
+scripts/pdfbklt.plx
+scripts/pdfrevert.plx
