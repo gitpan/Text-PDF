@@ -218,7 +218,7 @@ sub outobjdeep
                 @minilist = ();
             } elsif ($mode && !vec($self->{' subvec'}, $i, 1))
             {
-                for ($j = 0; $j <= $#minilist; $j++)
+                for ($j = 0; $j < scalar @minilist; $j++)
                 {
                     if ($j % 20 == 0)
                     {

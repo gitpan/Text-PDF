@@ -87,10 +87,10 @@ sub convert
     my ($self, $str) = @_;
 
     $str =~ s/\\([nrtbf\\()])/$trans{$1}/ogi;
-    $str =~ s/\\([0-7]+)/oct($1)/oegi;
+    $str =~ s/\\([0-7]+)/oct($1)/oeg;
     1 while $str =~ s/\<([0-9a-f]{2})/hex($1)."\<"/oige;
     $str =~ s/\<([0-9a-f])\>/hex($1 . "0")/oige;
-    $str =~ s/\<\>//oig;
+    $str =~ s/\<\>//og;
     return $str;
 }
 
@@ -115,10 +115,10 @@ sub as_pdf
 {
     my ($self) = @_;
     my ($str) = $self->{'val'};
-    
+
     if ($str =~ m/[^\n\r\t\b\f\040-\176\200-\377]/oi)
     {
-        $str =~ s/(.)/sprintf("%02X", ord($1))/oige;
+        $str =~ s/(.)/sprintf("%02X", ord($1))/oge;
         return "<$str>";
     } else
     {

@@ -83,7 +83,7 @@ not the array itself but the elements in the array.
 =cut
 
 sub elementsof
-{ wantarray ? @{$_[0]->{' val'}} : $#{$_[0]->{' val'}} + 1; }
+{ wantarray ? @{$_[0]->{' val'}} : scalar @{$_[0]->{' val'}}; }
 
 
 =head2 $a->add_elements

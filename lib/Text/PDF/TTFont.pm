@@ -27,7 +27,7 @@ use Text::PDF::Dict;
 use Text::PDF::Utils;
 @ISA = qw(Text::PDF::Dict);
 
-use Font::TTF::Font;
+use Font::TTF::Font 0.23;
 
 @cp1252 = (0 .. 127,
        0x20AC, 0x0081, 0x201A, 0x0192, 0x201E, 0x2026, 0x2020, 0x2021,
@@ -79,7 +79,7 @@ sub new
     }
     $name = $font->{'name'}->read->find_name(4) || return undef;
     $subf = $font->{'name'}->find_name(2);
-    $name =~ s/\s//oig;
+    $name =~ s/\s//og;
     $name .= $subf if ($subf =~ m/^Regular$/oi);
     $self->{'BaseFont'} = PDFName($self->{' subname'} . $name);
     $subcount++;
@@ -270,7 +270,7 @@ sub outobjdeep
             { $self->{'Widths'}{' val'}[$i - $self->{' minCode'}] = $d->{'MissingWidth'}; }
         }
         $f->{'glyf'}->read;
-        for ($i = 0; $i <= $#{$f->{'loca'}{'glyphs'}}; $i++)
+        for ($i = 0; $i < scalar @{$f->{'loca'}{'glyphs'}}; $i++)
         {
             next if vec($vec, $i, 1);
             $f->{'loca'}{'glyphs'}[$i] = undef;

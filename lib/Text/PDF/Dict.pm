@@ -77,8 +77,11 @@ sub outobjdeep
             $self->{'Length'} = Text::PDF::Number->new(0) unless (defined $self->{'Length'});
             $pdf->new_obj($self->{'Length'}) unless ($self->{'Length'}->is_obj($pdf));
             $pdf->out_obj($self->{'Length'});
-        } else
-        { $self->{'Length'} = Text::PDF::Number->new(length($self->{' stream'}) + 1); }
+        }
+        else
+        {
+            $self->{'Length'} = Text::PDF::Number->new(length($self->{' stream'}) + 1);
+        }
     }
 
     $fh->print("<<\n");
@@ -94,14 +97,14 @@ sub outobjdeep
     }
     while (($key, $val) = each %{$self})
     {
-        next if ($key =~ m/^[\s\-]/oi || $specs{$key});
-        next if $val eq "";
-        $key =~ s|([\000-\020%()\[\]{}<>#/])|"#".sprintf("%02X", ord($1))|oige;
+        next if ($key =~ m/^[\s\-]/o || $specs{$key});
+        next if ($val eq '');
+        $key =~ s|([\000-\020%()\[\]{}<>#/])|"#".sprintf("%02X", ord($1))|oge;
         $fh->print("/$key ");
         $val->outobj($fh, $pdf);
         $fh->print("\n");
     }
-    $fh->print(">>");
+    $fh->print('>>');
 
 #now handle the stream (if any)
     if (defined $self->{' streamloc'} && !defined $self->{' stream'})
@@ -118,7 +121,7 @@ sub outobjdeep
         my ($hasflate) = -1;
         my ($temp, $i, $temp1);
         
-        for ($i = 0; $i <= $#{$self->{'Filter'}{' val'}}; $i++)
+        for ($i = 0; $i < scalar @{$self->{'Filter'}{' val'}}; $i++)
         {
             $temp = $self->{'Filter'}{' val'}[$i]->val;
             if ($temp eq 'LZWDecode')               # hack to get around LZW patent
@@ -149,7 +152,7 @@ sub outobjdeep
             { $str = $f->outfilt($str, 1); }
         }
         $fh->print($str);
-        $self->{'Length'}{'val'} = $fh->tell - $loc + 1 if $#filts >= 0;
+        $self->{'Length'}{'val'} = $fh->tell - $loc + 1 if (scalar @filts > 0);
         $fh->print("\nendstream");
 #        $self->{'Length'}->outobjdeep($fh);
     } elsif (defined $self->{' streamfile'})
@@ -170,7 +173,7 @@ sub outobjdeep
         close(DICTFH);
         unless ($self->{' nofilt'})
         {
-            $str = "";
+            $str = '';
             foreach $f (reverse @filts)
             { $str = $f->outfilt($str, 1); }
             $fh->print($str);
@@ -200,7 +203,7 @@ sub read_stream
     my (@filts, $f, $last, $i, $dat);
     my ($len) = $self->{'Length'}->val;
 
-    $self->{' stream'} = "";
+    $self->{' stream'} = '';
 
     if (defined $self->{'Filter'})
     {
@@ -230,7 +233,7 @@ sub read_stream
 
         foreach $f (@filts)
         { $dat = $f->infilt($dat, $last); }
-        if (!$force_memory && !defined $self->{' streamfile'} && length($dat) + length($dat) > $mincache)
+        if (!$force_memory && !defined $self->{' streamfile'} && ((length($dat) * 2) > $mincache))
         {
             open (DICTFH, ">$tempbase") || next;
             binmode DICTFH;

@@ -117,7 +117,7 @@ sub infilt
         $str = $self->{'incache'} . $str;
         $self->{'incache'} = "";
     }
-    $str =~ s/(\r|\n)\n?//oig;
+    $str =~ s/(\r|\n)\n?//og;
     for ($i = 0; $i < length($str); $i += 5)
     {
         $b = 0;
@@ -127,7 +127,7 @@ sub infilt
             $res .= pack("N", 0);
             next;
         }
-        elsif ($isend && substr($str, $i, 6) =~ m/^(.{2,4})\-\>$/oi)
+        elsif ($isend && substr($str, $i, 6) =~ m/^(.{2,4})\-\>$/o)
         {
             $num = 5 - length($1);
             @c = unpack("C5", $1 . ("u" x (4 - $num)));     # pad with 84 to sort out rounding
@@ -170,21 +170,21 @@ sub outfilt
 # no state information, just slight inefficiency at block boundaries
     while ($str ne "")
     {
-        if ($str =~ m/((.)\2{2,127})/oi)
+        if ($str =~ m/^(.*?)((.)\2{2,127})(.*?)$/so)
         {
-            $s = $`;
-            $r = $1;
-            $str = $';
+            $s = $1;
+            $r = $2;
+            $str = $3;
         } else
         {
             $s = $str;
-            $r = "";
-            $str = "";
+            $r = '';
+            $str = '';
         }
         while (length($s) > 127)
         {
             $res .= pack("C", 127) . substr($s, 0, 127);
-            substr($s, 0, 127) = "";
+            substr($s, 0, 127) = '';
         }
         $res .= pack("C", length($s)) . $s if length($s) > 0;
         $res .= pack("C", 257 - length($r));
@@ -255,7 +255,7 @@ sub outfilt
 {
     my ($self, $str, $isend) = @_;
 
-    $str =~ s/(.)/sprintf("%02x", ord($1))/oige;
+    $str =~ s/(.)/sprintf("%02x", ord($1))/oge;
     $str .= ">" if $isend;
     $str;
 }
@@ -264,7 +264,7 @@ sub infilt
 {
     my ($self, $str, $isend) = @_;
 
-    $isend = ($str =~ s/>$//oig);
+    $isend = ($str =~ s/>$//og);
     $str =~ s/\s//oig;
     $str =~ s/([0-9a-z])/pack("C", hex($1 . "0"))/oige if ($isend && length($str) & 1);
     $str =~ s/([0-9a-z]{2})/pack("C", hex($1))/oige;

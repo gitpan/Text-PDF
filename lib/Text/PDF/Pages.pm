@@ -125,7 +125,7 @@ sub add_page
         while (--$c < 0)
         {
             shift(@path);
-            return undef if ($#path < 0);
+            return undef if (scalar @path == 0);
             ($p, $c, $m) = @{$path[0]};
         }
         $path[0] = [$p, $c, $m];
@@ -141,7 +141,7 @@ sub add_page
         while (++$c > $m)
         {
             shift(@path);
-            return undef if ($#path < 0);
+            return undef if (scalar @path == 0);
             ($p, $c, $m) = @{$path[0]};
         }
         $path[0] = [$p, $c, $m];
@@ -150,7 +150,7 @@ sub add_page
         $index--;
     }
 
-    while ($#path > 0 && $m >= 7 && ($c == 0 || $c > $m))
+    while (scalar @path > 1 && $m >= 7 && ($c == 0 || $c > $m))
     {
         shift(@path);
         if ($c > $m)
@@ -311,7 +311,7 @@ sub proc_set
     {
         foreach $e ($dict->{'ProcSet'}->elementsof)
         { @temp = grep($_ ne $e, @temp); }
-        return $self if $#temp < 0;
+        return $self if (scalar @temp == 0);
         @entries = @temp if defined $self->{'Resources'};
     }
 
