@@ -19,12 +19,14 @@ themselves.
 
 =head1 METHODS
 
-=head2 Text::PDF::Pages->new($parent)
+=head2 Text::PDF::Pages->new($pdfs,$parent)
 
-This creates a new Pages object. Notice that $parent here is not the file
-context for the object but the parent pages object for this pages. If we
-are using this class to create a root node, then $parent should point to the
-file context, which is identified by not having a Type of Pages.
+This creates a new Pages object. Notice that $parent here is not the
+file context for the object but the parent pages object for this
+pages. If we are using this class to create a root node, then $parent
+should point to the file context, which is identified by not having a
+Type of Pages.  $pdfs is the file object (or objects) in which to
+create the new Pages object.
 
 =cut
 
@@ -91,6 +93,7 @@ sub add_page
 {
     my ($self, $page, $index) = @_;
     my ($p, $nt, $s, @path, $c, $m);
+    $index ||= 0;           # keep perl -w happy :(
 
     for ($p = $self; defined $p->{'Parent'}; $p = $p->{'Parent'})
     { }

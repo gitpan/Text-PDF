@@ -116,7 +116,7 @@ Returns a Name in PDF Output form (including /)
 =cut
 
 sub asPDFName
-{ Text::PDF::Name->new(@_)->as_pdf; }
+{ Text::PDF::Name->new(@_)->as_pdf (@_); }
 
 
 =head2 asPDFNum

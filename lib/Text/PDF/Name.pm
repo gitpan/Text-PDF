@@ -25,41 +25,81 @@ to Names.
 
 sub from_pdf
 {
-    my ($class, $str) = @_;
+    my ($class, $str, $pdf) = @_;
     my ($self) = $class->SUPER::from_pdf($str);
-    
-    $self->{'val'} =~ s/\#([0-9A-F][0-9A-F])/chr(hex($1))/ge;   # thanks to rlandrum@capitoladvantage.com
+
+    $self->{'val'} = name_to_string ($self->{'val'}, $pdf);
     $self;
 }
 
-=head2 $n->convert
+=head2 $n->convert ($str, $pdf)
 
-Converts a name into a string by removing the / and converting any hex munging
+Converts a name into a string by removing the / and converting any hex
+munging unless $pdf is supplied and its version is less than 1.2.
 
 =cut
 
 sub convert
 {
-    my ($self, $str) = @_;
+    my ($self, $str, $pdf) = @_;
 
-    $str =~ s/^\\//o;
-    $str =~ s/\#([0-9a-f]{2})/hex($1)/oige;
+    $str = name_to_string ($str, $pdf);
     return $str;
 }
 
 
-=head2 as_pdf
+=head2 $s->as_pdf ($pdf)
 
-Returns a name formatted as PDF
+Returns a name formatted as PDF.  $pdf is optional but should be the
+PDF File object for which the name is intended if supplied.
 
 =cut
 
 sub as_pdf
 {
-    my ($self) = @_;
+    my ($self, $pdf) = @_;
     my ($str) = $self->{'val'};
-    
-    $str =~ s|([\000-\020%()\[\]{}<>#/])|"#".sprintf("%02X", ord($1))|oge;
+
+    $str = string_to_name ($str, $pdf);
     return ("/" . $str);
+}
+
+
+# Prior to PDF version 1.2, `#' was a literal character.  Embedded
+# spaces were implicitly allowed in names as well but it would be best
+# to ignore that (PDF reference 2nd edition, Appendix H, section 3.2.4.3).
+
+=head2 Text::PDF::Name->string_to_name ($str, $pdf)
+
+Suitably encode the string $str for output in the File object $pdf
+(the exact format may depend on the version of $pdf).  Prinicipally,
+encode certain characters in hex if the version is greater than 1.1.
+
+=cut
+
+sub string_to_name ($;$)
+{
+    my ($str, $pdf) = @_;
+    if (!(defined ($pdf) && $pdf->{' version'} < 2))
+      { $str =~ s|([\001-\040\177-\377%()\[\]{}<>#/])|"#".sprintf("%02X", ord($1))|oge; }
+    return $str;
+}
+
+=head2 Text::PDF::Name->name_to_string ($str, $pdf)
+
+Suitably decode the string $str as read from the File object $pdf (the
+exact decoding may depend on the version of $pdf).  Principally, undo
+the hex encoding for PDF versions > 1.1.
+
+=cut
+  
+sub name_to_string ($;$)
+{
+    my ($str, $pdf) = @_;
+    $str =~ s|^/||o;
+
+    if (!(defined ($pdf) && $pdf->{' version'} < 2))
+      { $str =~ s/#([0-9a-f]{2})/chr(hex($1))/oige; }
+    return $str;
 }
 

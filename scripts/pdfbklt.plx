@@ -1,8 +1,13 @@
+#!perl
+
 use Text::PDF::File;
 use Text::PDF::Utils;
 use Getopt::Std;
 
-$version = "1.503";     # MJPH  19-FEB-2002     Fix -p1 positioning (again!)
+$version = "1.505";     # MJPH   3-AUG-2002     -s comma separated. Allow -ve values in -s
+#                                                 merge errors store something, at least!                        
+# $version = "1.504";     # MJPH  27-JUN-2002     Use CropBox over MediaBox
+# $version = "1.503";     # MJPH  19-FEB-2002     Fix -p1 positioning (again!)
 # $version = "1.502";     # MJPH  18-JUN-2001     Add support for -p4s
 # $version = "1.501";     # MJPH   2-MAY-2001     Correct positioning of -s;;; type pages
 # $version = "1.500";     # MJPH  26-JUL-2000     Correct positioning in some cases and add landscape sizes
@@ -42,7 +47,7 @@ modifications at the end.
                 4   1/4 page right and left bottom (very big gutter)
                 4t  1/4 page right and left top (very big gutter)
                 4r/4l/4rt/4lt   1/4 page always on right or left bottom or top
-                location as a single string: minx;miny;maxx;maxy in pts
+                location as a single string: minx,miny,maxx,maxy in pts
 EOT
 }
 
@@ -159,10 +164,10 @@ sub merge_pages
     {
         next unless defined $pr[$j];
         @prbox = ();
-        foreach $n ($pr[$j]->find_prop('MediaBox')->elementsof)
+        foreach $n (($pr[$j]->find_prop('CropBox') || $pr[$j]->find_prop('MediaBox'))->elementsof)
         { push(@prbox, $n->val); }
         $is = 1;
-        if ($opt_s =~ m/^([0-9]+);([0-9]+);([0-9]+);([0-9]+)/o)
+        if ($opt_s =~ m/^(-?[0-9]+),(-?[0-9]+),(-?[0-9]+),(-?[0-9]+)/o)
         { @prbox = ($1, $2, $3, $4); }
         elsif ($opt_s =~ m/^([0-9])(.?)(.?)$/o)
         {
@@ -350,6 +355,15 @@ sub merge_dict
     my ($k, $v1, $v2);
     my (@a1, @a2, %a1);
 
+    if ($p1->{' isvisited'})
+    {
+        warn "circular reference!";
+        return $p1;
+    }
+        
+    $p1->{' isvisited'} = 1;
+    $p2->{' isvisited'} = 1;
+
     foreach $k (keys %{$p1})
     {
         next if ($k =~ m/^\s/oi);
@@ -376,12 +390,17 @@ sub merge_dict
 #        { $p1->{$k} = merge_dict($v1->val, $v2->val); }
         { $p1->{$k} = merge_dict($v1, $v2); }
         elsif ($v1->val ne $v2->val)
-        { warn "Inconsistent dictionaries at $k with " . $v1->val . " and " . $v2->val; }
+        { 
+            warn "Inconsistent dictionaries at $k with " . $v1->val . " and " . $v2->val;
+            $p1->{$k} = $v1;
+        }
     }
 
     foreach $k (grep (!defined $p1->{$_} && $_ !~ m/^\s/oi, keys %{$p2}))
     { $p1->{$k} = $p2->{$k}; }
     $p->out_obj($p1) if $p1->is_obj($p);
+    delete $p1->{' isvisited'};
+    delete $p2->{' isvisited'};
     return $p1;
 }
 
@@ -400,3 +419,4 @@ sub cm
     $res->{' stream'} = "$a[0] $a[1] $a[2] $a[3] $a[4] $a[5] cm";
     $res;
 }
+

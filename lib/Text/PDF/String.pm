@@ -108,7 +108,7 @@ sub val
 
 =head2 $->as_pdf
 
-Returns the string formatted for output as PDF
+Returns the string formatted for output as PDF for PDF File object $pdf.
 
 =cut
 
@@ -138,6 +138,6 @@ sub outobjdeep
 {
     my ($self, $fh, $pdf, %opts) = @_;
 
-    $fh->print($self->as_pdf);
+    $fh->print($self->as_pdf ($pdf));
 }
 

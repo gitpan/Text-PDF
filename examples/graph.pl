@@ -8,15 +8,16 @@ use Text::PDF::Utils;
 
 use Getopt::Std;
 
-getopts('d:p:s:');
+getopts('d:g:p:s:');
 
 unless(defined $ARGV[0])
 {
     die <<'EOT';
-    GRAPH [-d size] [-p num] [-s num] outfile
+    GRAPH [-d size] [-g num] [-p num] [-s num] outfile
 Generates graph paper as a PDF file to outfile.
 
     -d size     grid size in pts [8]
+    -g percent  percentage black [100]
     -p num      primary (thick) lines every num lines [10]
     -s num      secondary (somewhat thick) lines every num lines [5]
 
@@ -24,8 +25,10 @@ EOT
 }
 
 $opt_d = 8 unless $opt_d;
-$opt_p = 10 unless $opt_p;
-$opt_s = 5 unless $opt_s;
+$opt_g = 100 unless $opt_g;
+$opt_g = 1. - $opt_g / 100.;
+$opt_p = 10 unless defined $opt_p;
+$opt_s = 5 unless defined $opt_s;
 
 $pdf = Text::PDF::File->new;
 $root = Text::PDF::Pages->new($pdf);
@@ -45,13 +48,14 @@ $page = Text::PDF::Page->new($pdf, $root);
 $max_x = int(479 / $opt_d) * $opt_d + 58;
 $max_y = int(724 / $opt_d) * $opt_d + 58;
 
+$page->add("$opt_g G ");
 $i = 0;
 $curx = 58;
 while ($curx <= 537)
 {
-    if ($i % $opt_p == 0)
+    if ($opt_p and $i % $opt_p == 0)
     { $width = 1; }
-    elsif ($i % $opt_s == 0)
+    elsif ($opt_s and $i % $opt_s == 0)
     { $width = .5; }
     else
     { $width = .25; }
@@ -67,9 +71,9 @@ $i = 0;
 $cury = 58;
 while ($cury <= 782)
 {
-    if ($i % $opt_p == 0)
+    if ($opt_p and $i % $opt_p == 0)
     { $width = 1; }
-    elsif ($i % $opt_s == 0)
+    elsif ($opt_s and $i % $opt_s == 0)
     { $width = .5; }
     else
     { $width = .25; }

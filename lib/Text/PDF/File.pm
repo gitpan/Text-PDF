@@ -10,7 +10,7 @@ Text::PDF::File - Holds the trailers and cross-reference tables for a PDF file
  $p->new_obj($obj_ref);
  $p->free_obj($obj_ref);
  $p->append_file;
- $p->close;
+ $p->close_file;
  $p->release;       # IMPORTANT!
 
 =head1 DESCRIPTION
@@ -124,7 +124,7 @@ is in PDF which contains the location of the previous cross-reference table.
 
 use strict;
 no strict "refs";
-use vars qw($cr %types $VERSION);
+use vars qw($cr $irreg_char $reg_char $ws_char $delim_char %types $VERSION);
 # no warnings qw(uninitialized);
 
 use IO::File;
@@ -141,8 +141,12 @@ use Text::PDF::Objind;
 use Text::PDF::String;
 use Text::PDF::Page;
 use Text::PDF::Pages;
+use Text::PDF::Null;
 
-$VERSION = "0.20";      # MJPH  27-APR-2002     $trailer->{'Size'} becomes max num objects, fix line end problem,
+$VERSION = "0.22";      # MJPH  26-JUL-2002     Add Text::PDF::File::copy, tidy up update(), sort out out_trailer
+#                                                Fix to not remove string final CRs when reading dictionaries
+#$VERSION = "0.21";      # GJ     8-JUN-2002     Tidy up regexps, add Text::PDF::Null
+#$VERSION = "0.20";      # MJPH  27-APR-2002     $trailer->{'Size'} becomes max num objects, fix line end problem,
 #                                                remove warnings, update release code
 #$VERSION = "0.19";      # MJPH   5-FEB-2002     fix hex keys and ASCII85 filter
 #$VERSION = "0.18";      # MJPH   1-DEC-2001     add encryption hooks
@@ -167,7 +171,12 @@ BEGIN
 {
     my ($t, $type);
     
-    $cr = '\s*(?:\015|\012|(?:\015\012))';
+    $ws_char = '[ \t\r\n\f\0]';
+    $delim_char = '[][<>{}()/%]';
+    $reg_char = '[^][<>{}()/% \t\r\n\f\0]';
+    $irreg_char = '[][<>{}()/% \t\r\n\f\0]';
+    $cr = "$ws_char*(?:\015|\012|(?:\015\012))";
+
     %types = (
             'Page' => 'Text::PDF::Page',
             'Pages' => 'Text::PDF::Pages'
@@ -192,12 +201,14 @@ object is created in readiness for creating a new PDF file.
 
 sub new
 {
-    my ($class) = @_;
+    my ($class, $root) = @_;
     my ($self) = $class->_new;
-    my ($root);
 
-    $root = PDFDict();
-    $root->{'Type'} = PDFName("Catalog");
+    unless ($root)
+    {
+        $root = PDFDict();
+        $root->{'Type'} = PDFName("Catalog");
+    }
     $self->new_obj($root);
     $self->{'Root'} = $root;
     $self;
@@ -250,7 +261,8 @@ sub open
     $fh->seek(0, 2);            # go to end of file
     $end = $fh->tell();
     $self->{' epos'} = $end;
-    $fh->seek($end - 1024, 0);
+    if (!$fh->seek(($end > 1024 ? $end - 1024 : 0, 0)))
+      { die "Seek failed when reading PDF file $fname"; }
     $fh->read($buf, 1024);
     if ($buf !~ m/startxref$cr([0-9]+)$cr\%\%eof.*?$/oi)
     { die "Malformed PDF file $fname"; }
@@ -356,7 +368,7 @@ sub append_file
     { $tdict->{$t} = $self->{$t} unless defined $tdict->{$t}; }
 
     $fh->seek($self->{' epos'}, 0);
-    $self->out_trailer($tdict);
+    $self->out_trailer($tdict, $self->{' update'});
     close($self->{' OUTFILE'});
 }
 
@@ -425,24 +437,8 @@ sub close_file
     $tdict->{'Info'} = $self->{'Info'} if defined $self->{'Info'};
     $tdict->{'Root'} = (defined $self->{' newroot'} and $self->{' newroot'} ne "") ? $self->{' newroot'} : $self->{'Root'};
 
-# remove all freed objects from the outlist, AND the outlist_cache
-    unless ($self->{' update'})
-    {
-        my @newoutlist;
-        foreach my $item (@{$self->{' outlist'}})
-        {
-            if ($item->{' isfree'})
-            {
-                delete $self->{' outlist_cache'}{$item};
-            }
-            else
-            {
-                push( @newoutlist, $item );
-            }
-        }
-        $self->{' outlist'} = \@newoutlist;
-    }
-
+# remove all freed objects from the outlist, AND the outlist_cache if not updating
+# NO! Don't do that thing! In fact, let out_trailer do the opposite!
 
 
     $tdict->{'Size'} = $self->{'Size'} || PDFNum(1);
@@ -456,7 +452,7 @@ sub close_file
         $fh->seek($self->{' epos'}, 0);
     }
 
-    $self->out_trailer($tdict);
+    $self->out_trailer($tdict, $self->{' update'});
     close($self->{' OUTFILE'});
     MacPerl::SetFileInfo("CARO", "TEXT", $self->{' fname'})
             if ($^O eq "MacOS" && !ref($self->{' fname'}));
@@ -479,34 +475,31 @@ sub readval
     my ($self, $str, %opts) = @_;
     my ($fh) = $self->{' INFILE'};
     my ($res, $key, $value, $k);
-
+    
     $str = update($fh, $str);
-    if ($str =~ m/^\<\<\s*$cr?(.*?)$/so)
+    
+    if ($str =~ m/^<</so)
     {
-        $str = $1;
+        $str = substr ($str, 2);
         $str = update($fh, $str);
         $res = PDFDict();
-        while ($str !~ m/^\>\>$cr?/o)
+
+        while ($str !~ m/^>>/o)
         {
-            if ($str =~ m|^/([a-zA-Z0-9+\-!\"\$\&\'\#\*\,\.\:\;\=\?\@\\\^\_\`\|\~]+)$cr?(.*?)$|so)
+	    if ($str =~ s|^/($reg_char+)||o)
             {
-                $k = $1;
-                $str = $2;
-#                $key = PDFName($k);
-                $k =~ s/\#([0-9A-F][0-9A-F])/chr(hex($1))/ge;   # thanks to rlandrum@capitoladvantage.com
+		$k = Text::PDF::Name::name_to_string ($1, $self);
                 ($value, $str) = $self->readval($str, %opts);
                 $res->{$k} = $value;
-            } elsif ($str =~ m/^$cr(.*?)$/so)
-            {
-                $str = $1;
             }
-        $str = update($fh, $str);                           # thanks gareth.jones@stud.man.ac.uk
+	    $str = update($fh, $str);                           # thanks gareth.jones@stud.man.ac.uk
         }
-        $str =~ s/^\>\>$cr?//o;
+        $str =~ s/^>>//o;
         $str = update($fh, $str);
-        if (($str =~ m/^stream$cr(.*?)$/soi) && ($res->{'Length'}->val != 0))           # stream
+	# streams can't be followed by a lone carriage-return.
+        if (($str =~ s/^stream(?:(?:\015\012)|\012)//o)
+	    && ($res->{'Length'}->val != 0))           # stream
         {
-            $str = $1;
             $k = $res->{'Length'}->val;
             $res->{' streamsrc'} = $fh;
             $res->{' streamloc'} = $fh->tell - length($str);
@@ -523,17 +516,19 @@ sub readval
                 $res->{' stream'} = $value;
                 $res->{' nofilt'} = 1;
                 $str = update($fh, $str);
-                $str =~ s/^endstream$cr//oi;
+                $str =~ s/^endstream//o;
             }
         }
 
         bless $res, $types{$res->{'Type'}->val}
                 if (defined $res->{'Type'} && defined $types{$res->{'Type'}->val});
-    } elsif ($str =~ m/^([0-9]+)\s+([0-9]+)\s+R$cr?(.*?)$/so)                  # objind
+	# gdj: FIXME: if any of the ws chars were crs, then the whole
+	# string might not have been read.
+    } elsif ($str =~ m/^([0-9]+)$ws_char+([0-9]+)$ws_char+R/so) # objind
     {
         $k = $1;
         $value = $2;
-        $str = $3;
+        $str =~ s/^([0-9]+)$ws_char+([0-9]+)$ws_char+R//so;
         unless ($res = $self->test_obj($k, $value))
         {
             $res = Text::PDF::Objind->new();
@@ -543,13 +538,14 @@ sub readval
         }
         $res->{' parent'} = $self;
         $res->{' realised'} = 0;
-    } elsif ($str =~ m/^([0-9]+)\s+([0-9]+)\s+obj$cr?(.*?)$/soi)               # object data
+	# gdj: FIXME: if any of the ws chars were crs, then the whole
+ 	# string might not have been read.
+    } elsif ($str =~ m/^([0-9]+)$ws_char+([0-9]+)$ws_char+obj/so)  # object data
     {
         my ($obj);
-        
         $k = $1;
         $value = $2;
-        $str = $3;
+        $str =~ s/^([0-9]+)$ws_char+([0-9]+)$ws_char+obj//so;
         ($obj, $str) = $self->readval($str, %opts, 'objnum' => $k, 'objgen' => $value);
         if ($res = $self->test_obj($k, $value))
         { $res->merge($obj); }
@@ -560,50 +556,92 @@ sub readval
             $res->{' realised'} = 1;
         }
         $str = update($fh, $str);       # thanks to kundrat@kundrat.sk
-        $str =~ s/^endobj$cr//o;
-    } elsif ($str =~ m{^/([a-zA-Z0-9+\-!\"\$\&\'\#\*\,\.\:\;\=\?\@\\\^\_\`\|\~]+)$cr?(.*?)$}so)        # name
+        $str =~ s/^endobj//o;
+    } elsif ($str =~ m|^/($reg_char+)|so)        # name
     {
         # " <- Fix colourization
         $value = $1;
-        $str = $2;
-        $res = Text::PDF::Name->from_pdf($value);
-    } elsif (0 == index( $str, '(' ))
+        $str =~ s|^/($reg_char+)||so;
+        $res = Text::PDF::Name->from_pdf($value, $self);
+    } elsif ($str =~ m/^\(/o)  # literal string
     {
         $str =~ s/^\(//o;
-        $fh->read($str, 255, length($str)) while ($str !~ m/(?:[^\\]\)|^\))/o);     # thanks to kundrat@kundrat.sk
-        ($value, $str) = ($str =~ /^((?:\\.|[^)])*)\)\s*$cr?(.*?)$/so);
+	# We now need to find an unbalanced, unescaped right-paren.
+	# This can't be done with regexps.
+	my ($value) = "";
+	# The current level of nesting, when this reaches 0 we have finished.
+	my ($nested) = 1;
+	while (1) {
+	    # Remove everything up to the first (possibly escaped) paren.
+	    $str =~ /^((?:[^\\()]|\\[^()])*)(.*)/so;
+	    $value .= $1;
+	    $str = $2;
+
+	    if ($str =~ /^(\\[()])/o) {
+		# An escaped paren.  This would be tricky to do with
+		# the regexp above (it's very difficult to be certain
+		# that all cases are covered so I think it's better to
+		# deal with them explicitly).
+		$str = substr ($str, 2);
+		$value = $value . $1;
+	    } elsif ($str =~ /^\)/o) {
+		# Right paren
+		$nested--;
+		$str = substr ($str, 1);
+		if ($nested == 0)
+		    { last; }
+		$value = $value . ')';
+	    } elsif ($str =~ /^\(/o) {
+		# Left paren
+		$nested++;
+		$str = substr ($str, 1);
+		$value = $value . '(';
+	    } else {
+		# No parens, we must read more.  We don't use update
+		# because we don't want to remove whitespace or
+		# comments.
+		$fh->read($str, 255, length($str)) or die "Unterminated string.";
+	    }
+	}
+
         $res = Text::PDF::String->from_pdf($value);
-    } elsif (0 == index( $str, '<' ))                                          # hex-string
+    } elsif ($str =~ m/^</o)                                          # hex-string
     {
         $str =~ s/^<//o;
         $fh->read($str, 255, length($str)) while (0 > index( $str, '>' ));
-        ($value, $str) = ($str =~ /^(.*?)\>\s*$cr?(.*?)$/so);
+        ($value, $str) = ($str =~ /^(.*?)>(.*?)$/so);
         $res = Text::PDF::String->from_pdf("<" . $value . ">");
-    } elsif ($str =~ m/^\[$cr?/o)                                      # array
+    } elsif ($str =~ m/^\[/o)                                      # array
     {
-        $str =~ s/^\[$cr?//o;
+        $str =~ s/^\[//o;
+        $str = update($fh, $str);
         $res = PDFArray();
-        while ($str !~ m/^\]$cr?/o)
+        while ($str !~ m/^\]/o)
         {
             ($value, $str) = $self->readval($str, %opts);
             $res->add_elements($value);
         }
-        $str =~ s/^\]$cr?//oi;
-    } elsif ($str =~ m/^(true|false)$cr?/oi)                        # boolean
+        $str =~ s/^\]//o;
+    } elsif ($str =~ m/^(true|false)$irreg_char/o)                        # boolean
     {
         $value = $1;
-        $str =~ s/^(?:true|false)$cr?//o;
+        $str =~ s/^(?:true|false)//o;
         $res = Text::PDF::Bool->from_pdf($value);
-    } elsif ($str =~ m/^([+-.0-9]+)\s*$cr?/o)                             # number
+    } elsif ($str =~ m/^([+-.0-9]+)$irreg_char/o)                             # number
     {
         $value = $1;
-        $str =~ s/^([+-.0-9]+)\s*$cr?//o;
+        $str =~ s/^([+-.0-9]+)//o;
         $res = Text::PDF::Number->from_pdf($value);
-    } elsif ($str =~ m/^null$cr?/oi)
+    } elsif ($str =~ m/^null$irreg_char/o)
     {
-        $str =~ s/^null$cr?//oi;
-        $res = undef;
+        $str =~ s/^null//o;
+        $res = Text::PDF::Null->new;
+    } else
+    {
+	die "Can't parse `$str' near " . ($fh->tell()) . " length " . length($str) . ".";
     }
+    
+    $str =~ s/^$ws_char*//os;
     return ($res, $str);
 }
 
@@ -703,7 +741,7 @@ sub new_obj
             }
             $i = $ni;
         }
-        $tdict = $tdict->{' prev'}
+        $tdict = $tdict->{' prev'};
     }
 
     $i = $self->{' maxobj'}++;
@@ -839,6 +877,59 @@ sub ship_out
     $self;
 }
 
+=head2 $p->copy($outpdf, \&filter)
+
+Iterates over every object in the file reading the object, calling filter with the object
+and outputting the result. if filter is not defined, then just copies input to output.
+
+=cut
+
+sub copy
+{
+    my ($self, $out, $filt) = @_;
+    my ($tdict, $i, $nl, $ng, $nt, $res, $obj, $minl, $mini, $ming);
+    
+    foreach $i (grep (!m/^[\s\-]/o, keys %{$self}))
+    { $out->{$i} = $self->{$i} unless defined $out->{$i}; }
+    
+    $tdict = $self;
+    while (defined $tdict)
+    {
+        foreach $i (sort {$a <=> $b} keys %{$tdict->{' xref'}})
+        {
+            ($nl, $ng, $nt) = @{$tdict->{' xref'}{$i}};
+            next unless $nt eq 'n';
+
+            if ($nl < $minl || $mini == 0)
+            {
+                $mini = $i;
+                $ming = $ng;
+                $minl = $nl;
+            }
+            unless ($obj = $self->test_obj($i, $ng))
+            {
+                $obj = Text::PDF::Objind->new();
+                $obj->{' objnum'} = $i;
+                $obj->{' objgen'} = $ng;
+                $self->add_obj($obj, $i, $ng);
+                $obj->{' parent'} = $self;
+                $obj->{' realised'} = 0;
+            }
+            $obj->realise;
+            $res = defined $filt ? &{$filt}($obj) : $obj;
+            $out->new_obj($res) unless (!$res || $res->is_obj($out));
+        }
+        $tdict = $tdict->{' prev'};
+    }
+    
+# test for linearized and remove it from output
+    $obj = $self->test_obj($mini, $ming);
+    if ($obj->isa('Text::PDF::Dict') && $obj->{'Linearized'})
+    { $out->free_obj($obj); }
+    
+    $self;
+}
+
 
 =head1 PRIVATE METHODS & FUNCTIONS
 
@@ -888,14 +979,19 @@ sub update
 {
     my ($fh, $str) = @_;
 
-    $fh->read($str, 255, length($str)) while ($str !~ m/$cr/o);
-    while ($str =~ /^\s*\%(.*?)$cr(.*?)$/so)
+    $str =~ s/^$ws_char*//o;
+    while ($str !~ m/$cr/o && !$fh->eof)
     {
-        $str = $2;              # thanks to kundrat@kundrat.sk 
-        $fh->read($str, 255, length($str)) while ($str !~ m/$cr/o);
+        $fh->read($str, 255, length($str));
+        $str =~ s/^$ws_char*//so;
+        while ($str =~ m/^\%/o)
+        {
+            $fh->read($str, 255, length($str)) while ($str !~ m/$cr/o && !$fh->eof);
+            $str =~ s/^\%(.*)$cr$ws_char*//so;
+        }
     }
-    $fh->read($str, 1, length($str)) while ($str =~ m/$cr$/o && !$fh->eof);
-    $str;
+
+    return $str;
 }
 
 
@@ -955,7 +1051,7 @@ sub readxrtr
     $buf =~ s/^xref$cr//oi;
 
     $xlist = {};
-    while ($buf =~ m/^([0-9]+)\s+([0-9]+)$cr(.*?)$/so)
+    while ($buf =~ m/^([0-9]+)$ws_char+([0-9]+)$cr(.*?)$/so)
     {
         $xmin = $1;
         $xnum = $2;
@@ -963,7 +1059,7 @@ sub readxrtr
         $xdiff = length($buf);
         
         $fh->read($buf, 20 * $xnum - $xdiff + 15, $xdiff);
-        while ($xnum-- > 0 && $buf =~ s/^0*([0-9]*)\s+0*([0-9]+)\s+(\S)$cr//o)
+        while ($xnum-- > 0 && $buf =~ s/^0*([0-9]*)$ws_char+0*([0-9]+)$ws_char+([nf])$cr//o)
         { $xlist->{$xmin++} = [$1, $2, $3]; }
     }
 
@@ -992,7 +1088,7 @@ freed ones. It then outputs the trailing dictionary and the trailer code.
 
 sub out_trailer
 {
-    my ($self, $tdict) = @_;
+    my ($self, $tdict, $update) = @_;
     my ($objind, $j, $i, $iend, @xreflist, $first, $k, $xref, $tloc, @freelist);
     my (%locs, $size);
     my ($fh) = $self->{' OUTFILE'};
@@ -1024,9 +1120,31 @@ sub out_trailer
     @xreflist = sort {$self->{' objects'}{$a->uid}[0] <=>
                 $self->{' objects'}{$b->uid}[0]}
                         (@{$self->{' printed'}}, @{$self->{' free'}});
+
+    unless ($update)
+    {
+        $i = 1;
+        for ($j = 0; $j < @xreflist; $j++)
+        {
+            my (@inserts);
+            $k = $xreflist[$j];
+            while ($i < $self->{' objects'}{$k->uid}[0])
+            {
+                my ($n) = Text::PDF::Objind->new();
+                $self->add_obj($n, $i, 0);
+                $self->free_obj($n);
+                push(@inserts, $n);
+                $i++;
+            }
+            splice(@xreflist, $j, 0, @inserts);
+            $j += @inserts;
+            $i++;
+        }
+    }
+
     @freelist = sort {$self->{' objects'}{$a->uid}[0] <=>
                 $self->{' objects'}{$b->uid}[0]} @{$self->{' free'}};
-
+    
     $j = 0; $first = -1; $k = 0;
     for ($i = 0; $i <= $#xreflist + 1; $i++)
     {

@@ -1,11 +1,13 @@
 package Text::PDF::Dict;
 
 use strict;
-use vars qw(@ISA $mincache $tempbase);
+use vars qw(@ISA $mincache $tempbase $cr);
 # no warnings qw(uninitialized);
 
 use Text::PDF::Objind;
 @ISA = qw(Text::PDF::Objind);
+
+$cr = '(?:\015|\012|(?:\015\012))';
 
 use Text::PDF::Filter;
 
@@ -69,7 +71,7 @@ sub outobjdeep
 {
     my ($self, $fh, $pdf, %opts) = @_;
     my ($key, $val, $f, @filts);
-    my ($loc, $str, %specs);
+    my ($loc, $str, %specs, $len);
 
     if (defined $self->{' stream'} or defined $self->{' streamfile'} or defined $self->{' streamloc'})
     {
@@ -77,7 +79,7 @@ sub outobjdeep
         {
             $self->{'Length'} = Text::PDF::Number->new(0) unless (defined $self->{'Length'});
             $pdf->new_obj($self->{'Length'}) unless ($self->{'Length'}->is_obj($pdf));
-            $pdf->out_obj($self->{'Length'});
+#            $pdf->out_obj($self->{'Length'});
         }
         else
         {
@@ -100,7 +102,7 @@ sub outobjdeep
     {
         next if ($key =~ m/^[\s\-]/o || $specs{$key});
         next if ($val eq '');
-        $key =~ s|([\000-\020%()\[\]{}<>#/])|"#".sprintf("%02X", ord($1))|oge;
+	$key = Text::PDF::Name::string_to_name ($key, $pdf);
         $fh->print("/$key ");
         $val->outobj($fh, $pdf, %opts);
         $fh->print("\n");
@@ -153,8 +155,17 @@ sub outobjdeep
             { $str = $f->outfilt($str, 1); }
         }
         $fh->print($str);
-        $self->{'Length'}{'val'} = $fh->tell - $loc + 1 if (scalar @filts > 0);
-        $fh->print("\nendstream");
+        if (@filts > 0)
+        {
+            $len = $fh->tell - $loc + 1;
+            if ($self->{'Length'}{'val'} != $len)
+            {
+                $self->{'Length'}{'val'} = $len;
+                $pdf->out_obj($self->{'Length'}) if ($self->{'Length'}->is_obj($pdf));
+            }
+        }
+        $fh->print("\n") unless ($str =~ m/$cr$/o);
+        $fh->print("endstream");
 #        $self->{'Length'}->outobjdeep($fh);
     } elsif (defined $self->{' streamfile'})
     {
@@ -179,8 +190,16 @@ sub outobjdeep
             { $str = $f->outfilt($str, 1); }
             $fh->print($str);
         }
-        $self->{'Length'}{'val'} = $fh->tell - $loc + 1;
-        $fh->print("\nendstream\n");
+        
+        $len = $fh->tell - $loc + 1;
+        if ($self->{'Length'}{'val'} != $len)
+        {
+            $self->{'Length'}{'val'} = $len;
+            $pdf->out_obj($self->{'Length'}) if ($self->{'Length'}->is_obj($pdf));
+        }
+        
+        $fh->print("\n") unless ($str =~ m/$cr$/o);
+        $fh->print("endstream\n");
 #        $self->{'Length'}->outobjdeep($fh);
     }
 }
