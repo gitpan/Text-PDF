@@ -11,6 +11,7 @@ Text::PDF::File - Holds the trailers and cross-reference tables for a PDF file
  $p->free_obj($obj_ref);
  $p->append_file;
  $p->close;
+ $p->release;       # IMPORTANT!
 
 =head1 DESCRIPTION
 
@@ -138,7 +139,8 @@ use Text::PDF::Number;
 use Text::PDF::Objind;
 use Text::PDF::String;
 
-$VERSION = "0.14";      # MJPH   2-MAY-2001     More little bug fixes, added read_objnum
+$VERSION = "0.15";      # GST   30-MAY-2001     Memory leaks fixed
+#$VERSION = "0.14";      # MJPH   2-MAY-2001     More little bug fixes, added read_objnum
 #$VERSION = "0.13";      # MJPH  23-MAR-2001     General bug fix release
 #$VERSION = "0.12";      # MJPH  29-JUL-2000     Add font subsetting, random page insertion
 #$VERSION = "0.11";      # MJPH  18-JUL-2000     Add pdfstamp.plx and more debugging
@@ -248,6 +250,76 @@ sub open
     return $self;
 }
 
+=head2 $p->release()
+
+Releases ALL of the memory used by the PDF document and all of its component
+objects.  After calling this method, do B<NOT> expect to have anything left in
+the C<Text::PDF::File> object (so if you need to save, be sure to do it before
+calling this method).  
+
+B<NOTE>, that it is important that you call this method on any
+C<Text::PDF::File> object when you wish to destruct it and free up its memory.
+Internally, PDF files have an enormous number of cross-references and this
+causes circular references within the internal data structures.  Calling
+'C<release()>' forces a brute-force cleanup of the data structures, freeing up
+all of the memory.  Once you've called this method, though, don't expect to be
+able to do anything else with the C<Text::PDF::File> object; it'll have B<no>
+internal state whatsoever.
+
+B<Developer note:> As part of the brute-force cleanup done here, this method
+will throw a warning message whenever unexpected key values are found within
+the C<Text::PDF::File> object.  This is done to help ensure that any unexpected
+and unfreed values are brought to your attention so that you can bug us to keep
+the module updated properly; otherwise the potential for memory leaks due to
+dangling circular references will exist.  
+
+=cut
+
+sub release
+{
+    my ($self) = @_;
+
+    ###########################################################################
+    # Go through our list of keys/values and clean things up as needed.  We'll
+    # forcefully free up all of the memory for all of the values in our
+    # anonymous hash, and then recursively process all sub-data-structures to
+    # make sure that all of those get cleaned up properly as well:
+    # - Scalar values get explicitly deleted (as part of the mass cleanup).
+    # - Hash/List refs get their values added in to the list of things to
+    #   cleanup so we can process the structures recursively.
+    # - 'Text::PDF::*' elements get explicitly destructed to free up their
+    #   memory and break any potential circular references.
+    # - 'IO::File' elements get cleaned up as part of the mass cleanup, and
+    #   aren't explicitly listed below (although there are some in our
+    #   structure).
+    ###########################################################################
+    # NOTE: The checks below have been ordered such that the most commonly
+    #       occurring items get checked for and cleaned out first.
+    ###########################################################################
+    # FURTHER NOTE: Reducing the checks below to the least amount of checks
+    #               possible did not create any noticable performance
+    #               improvement.
+    ###########################################################################
+    my @tofree = values %{$self};
+    map { delete $self->{$_} } keys %{$self};
+    while (my $item = shift @tofree)
+    {
+        my $ref = ref($item);
+        if ($ref =~ /^Text::PDF::/o)
+        {
+            $item->release();
+        }
+        elsif ($ref eq 'ARRAY')
+        {
+            push( @tofree, @{$item} );
+        }
+        elsif ($ref eq 'HASH')
+        {
+            push( @tofree, values %{$item} );
+            map { delete $item->{$_} } keys %{$item};
+        }
+    }
+}
 
 =head2 $p->append_file()
 

@@ -70,7 +70,6 @@ sub new
     bless $self, ref $class || $class;
 }
 
-
 =head2 uid
 
 Returns a Unique id for this object, creating one if it didn't have one before
@@ -79,6 +78,117 @@ Returns a Unique id for this object, creating one if it didn't have one before
 
 sub uid
 { $_[0]->{' uid'} || ($_[0]->{' uid'} = $uidc++); }
+
+=head2 $r->release
+
+Releases ALL of the memory used by this indirect object, and all of its
+component/child objects.  This method is called automatically by
+'C<Text::PDF::File-E<gt>release>' (so you don't have to call it yourself).
+
+B<NOTE>, that it is important that this method get called at some point prior
+to the actual destruction of the object.  Internally, PDF files have an
+enormous amount of cross-references and this causes circular references within
+our own internal data structures.  Calling 'C<release()>' forces these circular
+references to be cleaned up and the entire internal data structure purged.
+
+B<Developer note:> As part of the brute-force cleanup done here, this method
+will throw a warning message whenever unexpected key values are found within
+the C<Text::PDF::Objind> object.  This is done to help ensure that unexpected
+and unfreed values are brought to your attention, so you can bug us to keep the
+module updated properly; otherwise the potential for memory leaks due to
+dangling circular references will exist.
+
+=cut
+
+sub release
+{
+    my ($self) = @_;
+
+    ###########################################################################
+    # Go through our list of keys, and clean things up as needed:
+    # - All 'parent' (or derivitive) keys get deleted without explicit
+    #   destruction, to break circular references.
+    # - All scalar values get deleted explicitly, to free up their memory.
+    #   This is generally handled well by Perl, but our checks later on require
+    #   that we free them up explicitly.
+    # - All 'Text::PDF::*' elements get explicitly destructed, to free up all
+    #   of their memory and break potential circular references.
+    # - All 'Font::TTF::*' elements get explicitly destructed, to free up all
+    #   of their memory and break potential circular references.
+    # - All 'IO::File' objects get silently destructed; we know there are a
+    #   few, and rather than name them all explicitly, we'll just clean them up
+    #   here by type.
+    ###########################################################################
+    # NOTE: The checks below have been ordered such that the most commonly
+    #       occurring items get checked for and cleaned out first.
+    ###########################################################################
+    # FURTHER NOTE: Reducing the checks below to the least amount of checks
+    #               possible did not create any noticable performance
+    #               improvement.
+    ###########################################################################
+    foreach my $key (keys %{$self})
+    {
+        my $ref = ref($self->{$key});
+        if ($ref eq '')
+        {
+            # Remove scalar value.
+            delete $self->{$key};
+        }
+        elsif ($ref =~ /^Text::PDF::/o)
+        {
+            if ($key =~ /parent/io)
+            {
+                # Potential circular reference.
+                delete $self->{$key};
+            }
+            else
+            {
+                # Sub-element, explicitly destruct.
+                my $val = $self->{$key};
+                delete $self->{$key};
+                $val->release();
+            }
+        }
+        elsif ($ref eq 'ARRAY')
+        {
+            # Remove sub-array (of _scalars_)
+            delete $self->{$key};
+        }
+        elsif ($ref =~ /^Font::TTF::/o)
+        {
+            # TTF font structure, explicitly destruct.
+            my $val = $self->{$key};
+            delete $self->{$key};
+            $val->release();
+        }
+        elsif ($ref eq 'IO::File')
+        {
+            # IO object, destruct silently.
+            delete $self->{$key};
+        }
+        elsif ($ref eq 'HASH')
+        {
+            # Remove sub-hash (of _scalars_)
+            delete $self->{$key};
+        }
+    }
+
+    ###########################################################################
+    # Now that we think that we've gone back and freed up all of the memory
+    # that we were using, check to make sure that we don't have any keys left
+    # in our own hash (we shouldn't).  IF we do have keys left, throw a warning
+    # message.
+    ###########################################################################
+    foreach my $key (keys %{$self})
+    {
+        warn ref($self) . " still has '$key' key left after release.\n";
+    }
+
+    ###########################################################################
+    # All done cleaning up.
+    ###########################################################################
+}
+
 
 =head2 $r->val
 

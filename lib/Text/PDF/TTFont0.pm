@@ -199,6 +199,16 @@ sub outobjdeep
         my ($mode, $miniArr, $i, $j, $first, @minilist);
         
         $f->{'glyf'}->read;
+
+        for ($i = 0; $i <= $max; $i++)
+        {
+            next unless(vec($self->{' subvec'},$i,1));
+            next unless($f->{'loca'}{glyphs}[$i]);
+            map { vec($self->{' subvec'},$_,1)=1; } $f->{loca}{glyphs}[$i]->get_refs;
+        }
+
+        $max = length($self->{' subvec'}) * 8;
+
         for ($i = 0; $i <= $max; $i++)
         {
             if (!$mode && vec($self->{' subvec'}, $i, 1))
