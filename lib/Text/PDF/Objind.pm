@@ -84,7 +84,7 @@ sub uid
 
 Returns the val of this object or reads the object and then returns its value.
 
-Note that all subclasses *must* make their own versions of this subroutine
+Note that all direct subclasses *must* make their own versions of this subroutine
 otherwise we could be in for a very deep loop!
 
 =cut
@@ -98,7 +98,8 @@ sub val
 
 =head2 $r->outobjdeep($fh, $pdf)
 
-Does very little, just outputs the endobj if the subclass wants it
+If you really want to output this object, then you must need to read it first.
+This also means that all direct subclasses must subclass this method or loop forever!
 
 =cut
 
@@ -106,7 +107,7 @@ sub outobjdeep
 {
     my ($self, $fh, $pdf) = @_;
 
-    $fh->print("\nendobj\n");
+    $self->{' parent'}->read_obj($self)->outobjdeep($fh, $pdf);
 }
 
 

@@ -138,7 +138,9 @@ use Text::PDF::Number;
 use Text::PDF::Objind;
 use Text::PDF::String;
 
-$VERSION = "0.07";      # MJPH  01-DEC-1999     Debug for pdfbklt
+$VERSION = "0.09";	# MJPH	31-MAR-2000	Copy trailer dictionary properly
+#$VERSION = "0.08";      # MJPH  07-FEB-2000     Add null element
+#$VERSION = "0.07";      # MJPH  01-DEC-1999     Debug for pdfbklt
 #$VERSION = "0.06";      # MJPH  11-SEP-1999     Sort out unixisms
 #$VERSION = "0.05";      # MJPH   9-SEP-1999     Add ship_out
 #$VERSION = "0.04";      # MJPH  14-JUL-1999     Correct paths for tarball release
@@ -247,7 +249,7 @@ Appends the objects for output to the read file and then appends the appropriate
 sub append_file
 {
     my ($self) = @_;
-    my ($tdict, $fh);
+    my ($tdict, $fh, $t);
     
     return undef unless ($self->{' update'});
     $tdict = PDFDict();
@@ -258,6 +260,11 @@ sub append_file
     else
     { $tdict->{'Root'} = $self->{'Root'}; }
     $tdict->{'Size'} = $self->{'Size'};
+
+# added v0.09
+    foreach $t (grep ($_ !~ m/^\s/oi, keys %$self))
+    { $tdict->{$t} = $self->{$t} unless defined $tdict->{$t}; }
+
     $fh = $self->{' INFILE'};
     $fh->seek($self->{' epos'}, 0);
     $self->out_trailer($tdict);
@@ -428,7 +435,8 @@ sub readval
             $res = $obj;
             $self->add_obj($res, $k, $value);
         }
-    } elsif ($str =~ m|^/(\w+)$cr?|oi)                                  # name
+    } elsif ($str =~ m{^/([a-z+\-!\"\$\&\'\*\,\.\:\;\=\?\@\\\^\_\`\|\~]+)$cr?}oi)        # name
+#    } elsif ($str =~ m{^/([a-z]+)$cr?}oi)        # name
     {
         $value = $1;
         $str = $';
@@ -469,6 +477,10 @@ sub readval
         $value = $1;
         $str = $';
         $res = Text::PDF::Number->from_pdf($value);
+    } elsif ($str =~ m/^(null)$cr?/oi)
+    {
+        $str = $';
+        $res = undef;
     }
     return ($res, $str);
 }

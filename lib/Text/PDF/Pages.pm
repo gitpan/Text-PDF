@@ -55,8 +55,14 @@ equal the page number)
 sub add_page
 {
     my ($self, $page, $index) = @_;
+    my ($t, $p);
 
-    $self->{'Count'}{'val'}++;
+    for ($t = $self; $t->{'Type'}{'val'} =~ m/^Pages$/oi; $t = $t->{'Parent'})
+    {
+        $t->{'Count'}{'val'}++;
+        foreach $p (@{$page->{' outto'}})
+        { $p->out_obj($t) if $t->is_obj($p); }
+    }
     if (defined $index)
     { splice(@{$self->{'Kids'}->val}, $index, 0, $page); }
     else

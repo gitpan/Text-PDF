@@ -1,5 +1,6 @@
 MANIFEST
 Makefile.PL
+examples/graph.pl
 lib/Text/PDF/Array.pm
 lib/Text/PDF/Bool.pm
 lib/Text/PDF/Dict.pm

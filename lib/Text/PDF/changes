@@ -1,3 +1,14 @@
+* 0.8
+
+** Pages
+    Adding a page updates the Pages tree to account for the added page
+
+** pdfaddpg.pl
+    Sort out page insertion bugs
+
+* 0.7
+Lots of changes in the area of fixing file updating (rather than creating)
+
 * 0.5
 Lots of changes and introduction of this document
 

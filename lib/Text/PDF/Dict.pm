@@ -97,7 +97,7 @@ sub outobjdeep
         $fh->seek($loc, 0);
     }
 
-    if (defined $self->{'Filter'})
+    if ((defined $self->{' stream'} || defined $self->{' streamfile'}) && defined $self->{'Filter'})
     {
         foreach $f ($self->{'Filter'}->elementsof)
         {

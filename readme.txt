@@ -16,16 +16,18 @@ UN-FEATURES (which may one day be fixed)
  .  No support for Type1 or Type3 fonts
  .  No higher level support of annotations, bookmarks, hot-links, etc.
  .  This is Alpha code which works for my apps. but may not for yours :)
- .  No test code
 
 In summary, this module provides a strong (IMO) base for working with PDF files
 but lacks some finesse. Users should know their way around the PDF specification.
 
+Included in the examples directory are some example programs starting from very
+simple PDF creation programs and working up. More extensive samples are included
+as scripts.
 
 REQUIREMENTS
 
-For the most part, this module set requires Compress::Zlib. It is used
-for compressed streams and within the Standard Fonts.
+This module set requires Compress::Zlib. It is used for compressed streams and
+within the Standard Fonts.
 
 INSTALLATION
 
