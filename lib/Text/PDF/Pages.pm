@@ -3,7 +3,7 @@ package Text::PDF::Pages;
 use strict;
 use vars qw(@ISA);
 @ISA = qw(Text::PDF::Dict);
-no warnings qw(uninitialized);
+# no warnings qw(uninitialized);
 
 use Text::PDF::Dict;
 use Text::PDF::Utils;
@@ -95,7 +95,7 @@ sub add_page
     for ($p = $self; defined $p->{'Parent'}; $p = $p->{'Parent'})
     { }
 
-    if ($index <= 0)
+    if (!defined $index or $index <= 0)
     {
         @path = ([$p, ($#{$p->{'Kids'}{' val'}}) x 2]);
         for ($s = $p->{'Kids'}{' val'}[-1]; defined $s && $s->realise->{'Type'}{'val'} eq 'Pages'; $s = $s->{'Kids'}{' val'}[-1])

@@ -58,6 +58,29 @@ sub new
     bless $self, $class;
 }
 
+sub release
+{
+    my ($self) = @_;
+
+# delete stuff that we know we can, here
+
+    my @tofree = map { delete $self->{$_} } keys %{$self};
+
+    while (my $item = shift @tofree)
+    {
+        my $ref = ref($item);
+        if (UNIVERSAL::can($item, 'release'))
+        { $item->release(); }
+        elsif ($ref eq 'ARRAY')
+        { push( @tofree, @{$item} ); }
+        elsif (UNIVERSAL::isa($ref, 'HASH'))
+        { release($item); }
+    }
+
+# check that everything has gone - it better had!
+    foreach my $key (keys %{$self})
+    { warn ref($self) . " still has '$key' key left after release.\n"; }
+}
 
 
 package Text::PDF::ASCII85Decode;
@@ -65,7 +88,7 @@ package Text::PDF::ASCII85Decode;
 use strict;
 use vars qw(@ISA);
 @ISA = qw(Text::PDF::Filter);
-no warnings qw(uninitialized);
+# no warnings qw(uninitialized);
 
 =head1 NAME
 
@@ -155,7 +178,7 @@ package Text::PDF::RunLengthDecode;
 use strict;
 use vars qw(@ISA);
 @ISA = qw(Text::PDF::Filter);
-no warnings qw(uninitialized);
+# no warnings qw(uninitialized);
 
 =head1 NAME
 
@@ -245,7 +268,7 @@ package Text::PDF::ASCIIHexDecode;
 use strict;
 use vars qw(@ISA);
 @ISA = qw(Text::PDF::Filter);
-no warnings qw(uninitialized);
+# no warnings qw(uninitialized);
 
 =head1 NAME
 
@@ -318,7 +341,7 @@ package Text::PDF::LZWDecode;
 use vars qw(@ISA @basedict);
 @ISA = qw(Text::PDF::FlateDecode);
 @basedict = map {pack("C", $_)} (0 .. 255, 0, 0);
-no warnings qw(uninitialized);
+# no warnings qw(uninitialized);
 
 sub new
 {

@@ -125,7 +125,7 @@ is in PDF which contains the location of the previous cross-reference table.
 use strict;
 no strict "refs";
 use vars qw($cr %types $VERSION);
-no warnings qw(uninitialized);
+# no warnings qw(uninitialized);
 
 use IO::File;
 
@@ -139,8 +139,12 @@ use Text::PDF::Name;
 use Text::PDF::Number;
 use Text::PDF::Objind;
 use Text::PDF::String;
+use Text::PDF::Page;
+use Text::PDF::Pages;
 
-$VERSION = "0.19";      # MJPH   5-FEB-2002     fix hex keys and ASCII85 filter
+$VERSION = "0.20";      # MJPH  27-APR-2002     $trailer->{'Size'} becomes max num objects, fix line end problem,
+#                                                remove warnings, update release code
+#$VERSION = "0.19";      # MJPH   5-FEB-2002     fix hex keys and ASCII85 filter
 #$VERSION = "0.18";      # MJPH   1-DEC-2001     add encryption hooks
 #$VERSION = "0.17";      # GST   18-JUL-2001     Handle \) in strings and tidy up endobj handling, no uninitialized warnings
 #$VERSION = "0.16";      # GST   18-JUL-2001     Major performance tweaks
@@ -238,8 +242,10 @@ sub open
         $self->{' fname'} = $fname;
     }
     $fh->read($buf, 255);
-    if ($buf !~ m/^\%pdf\-1\.[0-4]\s*$cr/moi)
-    { die "$fname not a PDF file version 1.0-1.4"; }
+    if ($buf !~ m/^\%pdf\-1\.(\d)\s*$cr/moi)
+    { die "$fname not a PDF file version 1.x"; }
+    else
+    { $self->{' Version'} = $1; }
 
     $fh->seek(0, 2);            # go to end of file
     $end = $fh->tell();
@@ -283,48 +289,37 @@ dangling circular references will exist.
 
 sub release
 {
-    my ($self) = @_;
+    my ($self, $force) = @_;
+    my (@tofree);
 
-    ###########################################################################
-    # Go through our list of keys/values and clean things up as needed.  We'll
-    # forcefully free up all of the memory for all of the values in our
-    # anonymous hash, and then recursively process all sub-data-structures to
-    # make sure that all of those get cleaned up properly as well:
-    # - Scalar values get explicitly deleted (as part of the mass cleanup).
-    # - Hash/List refs get their values added in to the list of things to
-    #   cleanup so we can process the structures recursively.
-    # - 'Text::PDF::*' elements get explicitly destructed to free up their
-    #   memory and break any potential circular references.
-    # - 'IO::File' elements get cleaned up as part of the mass cleanup, and
-    #   aren't explicitly listed below (although there are some in our
-    #   structure).
-    ###########################################################################
-    # NOTE: The checks below have been ordered such that the most commonly
-    #       occurring items get checked for and cleaned out first.
-    ###########################################################################
-    # FURTHER NOTE: Reducing the checks below to the least amount of checks
-    #               possible did not create any noticable performance
-    #               improvement.
-    ###########################################################################
-    my @tofree = values %{$self};
-    map { delete $self->{$_} } keys %{$self};
+# delete stuff that we know we can, here
+
+    if ($force)
+    {
+        foreach my $key (keys %{$self})
+        {
+            push(@tofree,$self->{$key});
+            $self->{$key}=undef;
+            delete($self->{$key});
+        }
+    }
+    else
+    {  @tofree = map { delete $self->{$_} } keys %{$self}; }
+
     while (my $item = shift @tofree)
     {
         my $ref = ref($item);
-        if ($ref =~ /^Text::PDF::/o)
-        {
-            $item->release();
-        }
+        if (UNIVERSAL::can($item, 'release'))
+        { $item->release($force); }
         elsif ($ref eq 'ARRAY')
-        {
-            push( @tofree, @{$item} );
-        }
-        elsif ($ref eq 'HASH')
-        {
-            push( @tofree, values %{$item} );
-            map { delete $item->{$_} } keys %{$item};
-        }
+        { push( @tofree, @{$item} ); }
+        elsif (UNIVERSAL::isa($ref, 'HASH'))
+        { release($item, $force); }
     }
+
+# check that everything has gone - it better had!
+    foreach my $key (keys %{$self})
+    { warn ref($self) . " still has '$key' key left after release.\n"; }
 }
 
 =head2 $p->append_file()
@@ -339,6 +334,14 @@ sub append_file
     my ($tdict, $fh, $t);
     
     return undef unless ($self->{' update'});
+    
+    $fh = $self->{' INFILE'};
+    if ($self->{' version'} > $self->{' Version'})
+    {
+        $fh->seek(0,0);
+        $fh->print("%PDF-1.$self->{' version'}\n");
+    }
+        
     $tdict = PDFDict();
     $tdict->{'Prev'} = PDFNum($self->{' loc'});
     $tdict->{'Info'} = $self->{'Info'};
@@ -352,7 +355,6 @@ sub append_file
     foreach $t (grep ($_ !~ m/^[\s\-]/o, keys %$self))
     { $tdict->{$t} = $self->{$t} unless defined $tdict->{$t}; }
 
-    $fh = $self->{' INFILE'};
     $fh->seek($self->{' epos'}, 0);
     $self->out_trailer($tdict);
     close($self->{' OUTFILE'});
@@ -421,7 +423,7 @@ sub close_file
     
     $tdict = PDFDict();
     $tdict->{'Info'} = $self->{'Info'} if defined $self->{'Info'};
-    $tdict->{'Root'} = $self->{' newroot'} ne "" ? $self->{' newroot'} : $self->{'Root'};
+    $tdict->{'Root'} = (defined $self->{' newroot'} and $self->{' newroot'} ne "") ? $self->{' newroot'} : $self->{'Root'};
 
 # remove all freed objects from the outlist, AND the outlist_cache
     unless ($self->{' update'})
@@ -606,7 +608,7 @@ sub readval
 }
 
 
-=head2 $ref = $p->read_obj($objind)
+=head2 $ref = $p->read_obj($objind, %opts)
 
 Given an indirect object reference, locate it and read the object returning
 the read in object.
@@ -659,7 +661,7 @@ sub new_obj
     my ($res);
     my ($tdict, $i, $ni, $ng);
 
-    if (scalar @{$self->{' free'}} > 0)
+    if (defined $self->{' free'} and scalar @{$self->{' free'}} > 0)
     {
         $res = shift(@{$self->{' free'}});
         if (defined $base)
@@ -679,8 +681,8 @@ sub new_obj
     $tdict = $self;
     while (defined $tdict)
     {
-        $i = $tdict->{' xref'}{$i}[0];
-        while ($i != 0)
+        $i = $tdict->{' xref'}{defined($i)?$i:''}[0];
+        while (defined $i and $i != 0)
         {
             ($ni, $ng) = @{$tdict->{' xref'}{$i}};
             if (!defined $self->locate_obj($i, $ng))
@@ -892,6 +894,7 @@ sub update
         $str = $2;              # thanks to kundrat@kundrat.sk 
         $fh->read($str, 255, length($str)) while ($str !~ m/$cr/o);
     }
+    $fh->read($str, 1, length($str)) while ($str =~ m/$cr$/o && !$fh->eof);
     $str;
 }
 
@@ -1005,8 +1008,15 @@ sub out_trailer
 #        $objind->outobjdeep($fh, $self);
 #        $fh->print("\nendobj\n");
 #    }
-    $size = @{$self->{' printed'}} + @{$self->{' free'}};
-    $tdict->{'Size'} = PDFNum($tdict->{'Size'}->val + $size);
+
+#    $size = @{$self->{' printed'}} + @{$self->{' free'}};
+#    $tdict->{'Size'} = PDFNum($tdict->{'Size'}->val + $size);
+# PDFSpec 1.3 says for /Size: (Required) Total number of entries in the file’s 
+# cross-reference table, including the original table and all updates. Which
+# is what the previous two lines implement.
+# But this seems to make Acrobat croak on saving so we try the following from
+# basil.duval@epfl.ch
+    $tdict->{'Size'} = PDFNum($self->{' maxobj'});
 
     $tloc = $fh->tell;
     $fh->print("xref\n");
@@ -1036,7 +1046,7 @@ sub out_trailer
             for ($j = $first; $j < $i; $j++)
             {
                 $xref = $xreflist[$j];
-                if ("$freelist[$k]" eq "$xref")
+                if (defined $freelist[$k] && defined $xref && "$freelist[$k]" eq "$xref")
                 {
                     $k++;
                     $fh->print(pack("A10AA5A4",

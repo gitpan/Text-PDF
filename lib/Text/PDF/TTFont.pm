@@ -22,7 +22,7 @@ to entries in the appropriate PDF dictionaries.
 
 use strict;
 use vars qw(@ISA @cp1252 $subcount);
-no warnings qw(uninitialized);
+# no warnings qw(uninitialized);
 
 use Text::PDF::Dict;
 use Text::PDF::Utils;

@@ -2,7 +2,7 @@ package Text::PDF::Array;
 
 use strict;
 use vars qw(@ISA);
-no warnings qw(uninitialized);
+# no warnings qw(uninitialized);
 
 use Text::PDF::Objind;
 @ISA = qw(Text::PDF::Objind);

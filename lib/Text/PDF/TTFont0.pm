@@ -22,7 +22,7 @@ to entries in the appropriate PDF dictionaries.
 
 use strict;
 use vars qw(@ISA);
-no warnings qw(uninitialized);
+# no warnings qw(uninitialized);
 
 use Text::PDF::TTFont;
 use Text::PDF::Dict;
@@ -151,6 +151,27 @@ sub out_text
     my ($g, $res);
 
     foreach $g (map {$f->{'cmap'}->ms_lookup($_)} (@clist))
+    {
+        vec($self->{' subvec'}, $g, 1) = 1 if ($self->{' subset'});
+        $res .= sprintf("%04X", $g);
+    }
+    "<$res>";
+}
+
+
+=head2 out_glyphs(@n)
+
+Marks the glyphs as being needed in the output font when subsetting. Returns a string
+to render the glyphs as specified.
+
+=cut
+
+sub out_glyphs
+{
+    my ($self, @list) = @_;
+    my ($g, $res);
+    
+    foreach $g (@list)
     {
         vec($self->{' subvec'}, $g, 1) = 1 if ($self->{' subset'});
         $res .= sprintf("%04X", $g);

@@ -45,7 +45,7 @@ Holds a direct reference to the next free object in the free list.
 
 use strict;
 use vars qw(@inst %inst $uidc);
-no warnings qw(uninitialized);
+# no warnings qw(uninitialized);
 
 # protected keys during emptying and copying, etc.
 
@@ -100,91 +100,37 @@ dangling circular references will exist.
 
 sub release
 {
-    my ($self) = @_;
+    my ($self, $force) = @_;
+    my (@tofree);
 
-    ###########################################################################
-    # Go through our list of keys, and clean things up as needed:
-    # - All 'parent' (or derivitive) keys get deleted without explicit
-    #   destruction, to break circular references.
-    # - All scalar values get deleted explicitly, to free up their memory.
-    #   This is generally handled well by Perl, but our checks later on require
-    #   that we free them up explicitly.
-    # - All 'Text::PDF::*' elements get explicitly destructed, to free up all
-    #   of their memory and break potential circular references.
-    # - All 'Font::TTF::*' elements get explicitly destructed, to free up all
-    #   of their memory and break potential circular references.
-    # - All 'IO::File' objects get silently destructed; we know there are a
-    #   few, and rather than name them all explicitly, we'll just clean them up
-    #   here by type.
-    ###########################################################################
-    # NOTE: The checks below have been ordered such that the most commonly
-    #       occurring items get checked for and cleaned out first.
-    ###########################################################################
-    # FURTHER NOTE: Reducing the checks below to the least amount of checks
-    #               possible did not create any noticable performance
-    #               improvement.
-    ###########################################################################
-    foreach my $key (keys %{$self})
+# delete stuff that we know we can, here
+
+    if ($force)
     {
-        my $ref = ref($self->{$key});
-        if ($ref eq '')
+        foreach my $key (keys %{$self})
         {
-            # Remove scalar value.
-            delete $self->{$key};
+            push(@tofree,$self->{$key});
+            $self->{$key}=undef;
+            delete($self->{$key});
         }
-        elsif ($ref =~ /^Text::PDF::/o)
-        {
-            if ($key =~ /parent/io)
-            {
-                # Potential circular reference.
-                delete $self->{$key};
-            }
-            else
-            {
-                # Sub-element, explicitly destruct.
-                my $val = $self->{$key};
-                delete $self->{$key};
-                $val->release();
-            }
-        }
+    }
+    else
+    {  @tofree = map { delete $self->{$_} } keys %{$self}; }
+
+    while (my $item = shift @tofree)
+    {
+        my $ref = ref($item);
+        if (UNIVERSAL::can($item, 'release'))
+        { $item->release($force); }
         elsif ($ref eq 'ARRAY')
-        {
-            # Remove sub-array (of _scalars_)
-            delete $self->{$key};
-        }
-        elsif ($ref =~ /^Font::TTF::/o)
-        {
-            # TTF font structure, explicitly destruct.
-            my $val = $self->{$key};
-            delete $self->{$key};
-            $val->release();
-        }
-        elsif ($ref eq 'IO::File')
-        {
-            # IO object, destruct silently.
-            delete $self->{$key};
-        }
-        elsif ($ref eq 'HASH')
-        {
-            # Remove sub-hash (of _scalars_)
-            delete $self->{$key};
-        }
+        { push( @tofree, @{$item} ); }
+        elsif (UNIVERSAL::isa($ref, 'HASH'))
+        { release($item, $force); }
     }
 
-    ###########################################################################
-    # Now that we think that we've gone back and freed up all of the memory
-    # that we were using, check to make sure that we don't have any keys left
-    # in our own hash (we shouldn't).  IF we do have keys left, throw a warning
-    # message.
-    ###########################################################################
+# check that everything has gone - it better had!
     foreach my $key (keys %{$self})
-    {
-        warn ref($self) . " still has '$key' key left after release.\n";
-    }
-
-    ###########################################################################
-    # All done cleaning up.
-    ###########################################################################
+    { warn ref($self) . " still has '$key' key left after release.\n"; }
 }
 
 
@@ -201,7 +147,7 @@ sub val
 {
     my ($self) = @_;
     
-    $self->{' parent'}->read_obj($self)->val unless ($self->{' realised'});
+    $self->{' parent'}->read_obj(@_)->val unless ($self->{' realised'});
 }
 
 =head2 $r->realise
@@ -211,7 +157,7 @@ Makes sure that the object is fully read in, etc.
 =cut
 
 sub realise
-{ $_[0]->{' realised'} ? $_[0] : $_[0]->{' parent'}->read_obj($_[0]); }
+{ $_[0]->{' realised'} ? $_[0] : $_[0]->{' parent'}->read_obj(@_); }
 
 =head2 $r->outobjdeep($fh, $pdf)
 

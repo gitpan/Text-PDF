@@ -2,7 +2,7 @@ package Text::PDF::Dict;
 
 use strict;
 use vars qw(@ISA $mincache $tempbase);
-no warnings qw(uninitialized);
+# no warnings qw(uninitialized);
 
 use Text::PDF::Objind;
 @ISA = qw(Text::PDF::Objind);

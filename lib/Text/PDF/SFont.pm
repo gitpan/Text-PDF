@@ -6,7 +6,7 @@ use vars qw(@ISA %widths @encodings);
 
 use Text::PDF::Utils;
 use Compress::Zlib;
-no warnings qw(uninitialized);
+# no warnings qw(uninitialized);
 
 =head1 NAME
 
@@ -114,13 +114,13 @@ sub width
     
     $self->getBase;
     foreach (unpack("C*", $text))
-    { $width += $widths{$str}[$enc ne "" ? $enc_map{$enc}[$_] : $_]; }
+    { $width += $widths{$str}[(defined $enc and $enc ne "") ? $enc_map{$enc}[$_] : $_]; }
     $width / 1000;
 }
 
 =head2 $f->trim($text, $len)
 
-Trims the given text to the given length (in per mille em) returning the trimmed
+Trims the given text to the given length (in em) returning the trimmed
 text
 
 =cut

@@ -26,7 +26,7 @@ use vars qw(@EXPORT @ISA);
 @ISA = qw(Exporter);
 @EXPORT = qw(PDFBool PDFArray PDFDict PDFName PDFNum PDFStr
              asPDFBool asPDFName asPDFNum asPDFStr);
-no warnings qw(uninitialized);
+# no warnings qw(uninitialized);
 
 
 =head2 PDFBool

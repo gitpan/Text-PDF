@@ -11,7 +11,7 @@ that are basically stringlike (Number, Name, etc.)
 
 use strict;
 use vars qw(@ISA %trans %out_trans);
-no warnings qw(uninitialized);
+# no warnings qw(uninitialized);
 
 use Text::PDF::Objind;
 @ISA = qw(Text::PDF::Objind);
