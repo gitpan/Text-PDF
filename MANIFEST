@@ -1,10 +1,15 @@
 MANIFEST
+MANIFEST.SKIP
 Make.PM
 Makefile.PL
+examples/CD.CFG
 examples/graph.pl
+examples/hello.pl
 examples/pdfaddobj.pl
 examples/pdfaddpg.pl
+examples/pdfcrop.pl
 examples/pdfgetobj.pl
+examples/test.pdf
 lib/Text/PDF/Array.pm
 lib/Text/PDF/Bool.pm
 lib/Text/PDF/Dict.pm

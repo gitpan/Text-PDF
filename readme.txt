@@ -43,11 +43,14 @@ Installed with this package are the following scripts:
 
 EXAMPLES
 
-Included in the examples directory are some smaller utilities:
+Included in the examples directory are some smaller utilities which are also
+useful, so don't throw them away!
 
     graph       Makes graph paper - not very complex
+    hello       The "Hello World" program
     pdfaddobj   Debug aid to insert data as an object in a file
     pdfaddpg    Adds a blank page to a PDF file at any location
+    pdfcrop     Adds crop marks to a page (see cd.cfg)
     pdfgetobj   Extracts a particular object from a PDF file (debugging aid)
 
 REQUIREMENTS

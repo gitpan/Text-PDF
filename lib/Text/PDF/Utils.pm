@@ -139,7 +139,7 @@ sub unpacku
     my ($str) = @_;
     my (@res);
 
-    return (unpack("U*", $str)) if ($^V ge v5.6.0);
+    return (unpack("U*", $str)) if ($^V && $^V ge v5.6.0);
     
     $str = "$str";              # copy $str
     while (length($str))        # Thanks to Gisle Aas for some of his old code

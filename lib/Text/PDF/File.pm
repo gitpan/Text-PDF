@@ -138,8 +138,8 @@ use Text::PDF::Number;
 use Text::PDF::Objind;
 use Text::PDF::String;
 
-
-$VERSION = "0.12";      # MJPH  29-JUL-2000     Add font subsetting, random page insertion
+$VERSION = "0.13";      # MJPH  23-MAR-2001     General bug fix release
+#$VERSION = "0.12";      # MJPH  29-JUL-2000     Add font subsetting, random page insertion
 #$VERSION = "0.11";      # MJPH  18-JUL-2000     Add pdfstamp.plx and more debugging
 #$VERSION = "0.10";	     # MJPH	 27-JUN-2000     Tidy up some bugs - names
 #$VERSION = "0.09";	     # MJPH	 31-MAR-2000     Copy trailer dictionary properly
@@ -374,7 +374,7 @@ read from the file.
 
 sub readval
 {
-    my ($self, $str) = @_;
+    my ($self, $str, %opts) = @_;
     my ($fh) = $self->{' INFILE'};
     my ($res, $key, $value, $k);
 
@@ -407,19 +407,22 @@ sub readval
             $k = $res->{'Length'}->val;
             $res->{' streamsrc'} = $fh;
             $res->{' streamloc'} = $fh->tell - length($str);
-            if ($k > length($str))
+            unless ($opts{'nostreams'})
             {
-                $value = $str;
-                $k -= length($str);
-                read ($fh, $str, $k + 11);          # slurp the whole stream!
-            } else
-            { $value = ""; }
-            $value .= substr($str, 0, $k);
-            $res->{' stream'} = $value;
-            $res->{' nofilt'} = 1;
-            $str = update($fh, $str);
-            $str =~ m/^endstream$cr/oi;
-            $str = $';
+                if ($k > length($str))
+                {
+                    $value = $str;
+                    $k -= length($str);
+                    read ($fh, $str, $k + 11);          # slurp the whole stream!
+                } else
+                { $value = ""; }
+                $value .= substr($str, 0, $k);
+                $res->{' stream'} = $value;
+                $res->{' nofilt'} = 1;
+                $str = update($fh, $str);
+                $str =~ m/^endstream$cr/oi;
+                $str = $';
+            }
         }
 
         bless $res, $types{$res->{'Type'}->val}
@@ -445,7 +448,7 @@ sub readval
         $k = $1;
         $value = $2;
         $str = $';
-        ($obj, $str) = $self->readval($str);
+        ($obj, $str) = $self->readval($str, %opts);
         if ($res = $self->test_obj($k, $value))
         { $res->merge($obj); }
         else
@@ -482,7 +485,7 @@ sub readval
         $res = PDFArray();
         while ($str !~ m/^\]$cr?/oi)
         {
-            ($value, $str) = $self->readval($str);
+            ($value, $str) = $self->readval($str, %opts);
             $res->add_elements($value);
         }
         $str =~ s/^\]$cr?//oi;
@@ -514,14 +517,14 @@ the read in object.
 
 sub read_obj
 {
-    my ($self, $objind) = @_;
+    my ($self, $objind, %opts) = @_;
     my ($loc, $res, $str, $oldloc);
 
 #    return ($objind) if $self->{' objects'}{$objind->uid};
     $loc = $self->locate_obj($objind->{' objnum'}, $objind->{' objgen'});
     $oldloc = $self->{' INFILE'}->tell;
     $self->{' INFILE'}->seek($loc, 0);
-    ($res, $str) = $self->readval("");
+    ($res, $str) = $self->readval("", %opts);
     $self->{' INFILE'}->seek($oldloc, 0);
     $objind->merge($res);
     return $objind;

@@ -72,7 +72,7 @@ sub outobjdeep
 
     if (defined $self->{' stream'} or defined $self->{' streamfile'} or defined $self->{' streamloc'})
     {
-        if ($self->{'Filter'} || !$self->{' stream'})
+        if ($self->{'Filter'} || !defined $self->{' stream'})
         {
             $self->{'Length'} = Text::PDF::Number->new(0) unless (defined $self->{'Length'});
             $pdf->new_obj($self->{'Length'}) unless ($self->{'Length'}->is_obj($pdf));
