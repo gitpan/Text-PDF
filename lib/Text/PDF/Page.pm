@@ -50,11 +50,11 @@ sub new
     my ($class, $pdf, $parent, $index) = @_;
     my ($self) = {};
 
-    bless $self, $class;
+    $class = ref $class if ref $class;
+    $self = $class->SUPER::new($pdf, $parent);
     $self->{'Type'} = PDFName('Page');
-    $self->{'Parent'} = $parent;
-    $self->{' outto'} = [$pdf];
-    $pdf->new_obj($self);
+    delete $self->{'Count'};
+    delete $self->{'Kids'};
     $parent->add_page($self, $index);
     $self;
 }

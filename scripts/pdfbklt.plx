@@ -3,6 +3,9 @@ use Text::PDF::File;
 use Text::PDF::Utils;
 use Getopt::Std;
 
+$version = "1.500";     # MJPH  26-JUL-2000     Correct positioning in some cases and add landscape sizes
+
+
 # $version = "1.100";     # MJPH   3-AUG-1998     Support new PDF library
 # $version = "1.101";     # MJPH  13-OCT-1998     Debug resource merging not being output
 # $version = "1.200";     # MJPH   6-NOV-1998     Merging external resources and change -r
@@ -11,7 +14,7 @@ use Getopt::Std;
 # $version = "1.302";     # MJPH  30-NOV-1999     Update to use Text::PDF
 # $version = "1.302";     # MJPH  11-DEC-1999     Make sure updated root output
 # $version = "1.4";       # MJPH   1-FEB-2000     Add -l and preset paper sizes
-$version = "1.401";     # MJPH  28-JUN-2000     Debug content lists and -r
+# $version = "1.401";     # MJPH  28-JUN-2000     Debug content lists and -r
 
 getopts("b:h:lp:qrs:");
 
@@ -44,7 +47,11 @@ EOT
 
 %sizes=(
     'a4' => '595;842',
-    'ltr' => '612;792'
+    'a4l' => '842;595',
+    'ltr' => '612;792',
+    'ltrl' => '792;612',
+    'lgl' => '612;1008',
+    'lgll' => '1008;612',
     );
 
 $opt_b = $sizes{lc($opt_b)} if defined $sizes{lc($opt_b)};
@@ -54,7 +61,7 @@ $r = $p->read_obj($p->{'Root'});
 $pgs = $p->read_obj($r->{'Pages'});
 $pgcount = $pgs->{'Count'}->val;
 
-foreach ('Outline', 'Dests', 'Threads', 'AcroForm', 'PageLabels', 'StructTreeRoot')
+foreach (qw(Outlines Dests Threads AcroForm PageLabels StructTreeRoot OpenAction PageMode))
 {
     if (defined $r->{$_})
     {
@@ -194,7 +201,9 @@ sub merge_pages
             {
                 
                 $slist[0] = cm($xs, 0, 0, $ys,
-                        $pbox[0] - ($xs * $prbox[0]), $pbox[1] - ($ys * $prbox[1]));
+#                        $pbox[0] - ($xs * $prbox[0]), $pbox[1] - ($ys * $prbox[1]));
+                        .5 * ($pbox[2] - $xs * ($prbox[2] - $prbox[0])) + $pbox[0],
+                        .5 * ($pbox[3] - $ys * ($prbox[3] - $prbox[0])) + $pbox[1]);
             } elsif ($opt_p == 1)                   # landscape on portrait to portrait
             {
                 $slist[0] = cm(0, -$scale * $ys, $xs / $scale, 0,
@@ -202,16 +211,21 @@ sub merge_pages
             } elsif ($opt_p == 2 && $is != 2)       # portrait source on portrait
             {
                 @scalestr = (0, 0.5 * $ys * $scale, -$xs / $scale, 0,
-                        0.5 * $xs * $prbox[1] / $scale + $pbox[2]);
+                        0.5 * ($xs * ($prbox[3] - $prbox[1]) / $scale + $pbox[2]));
                 $slist[0] = cm(@scalestr,
-                        0.5 * (-$ys * $scale * $prbox[0] + $pbox[1] + $pbox[3]));
+#                        0.5 * (-$ys * $scale * $prbox[0] + $pbox[1] + $pbox[3]));
+                         .25 * (3 * ($pbox[1] + $pbox[3]) - $ys * $scale * ($prbox[2] - $prbox[0])));
                 $slist[1] = cm(@scalestr,
-                        -0.5 * $xs * $scale * $prbox[0] + $pbox[1]);
+#                        -0.5 * $ys * $scale * $prbox[0] + $pbox[1]);
+                         .25 * (3 * $pbox[1] + $pbox[3] - $ys * $scale * ($prbox[2] - $prbox[0])));
             } elsif ($opt_p == 2)                   # double page landscape on portrait
             {
-                @scalestr = ($xs, 0, 0, 0.5 * $ys, -$xs * $prbox[0] + $pbox[0]);
-                $slist[0] = cm(@scalestr, 0.5 * (-$ys * $prbox[1] + $pbox[1] + $pbox[3]));
-                $slist[1] = cm(@scalestr, -0.5 * $ys * $prbox[1] + $pbox[1]);
+                @scalestr = ($xs, 0, 0, 0.5 * $ys, .5 * ($pbox[2] - $xs * ($prbox[2] - $prbox[0])));
+#                -$xs * $prbox[0] + $pbox[0]);
+#                $slist[0] = cm(@scalestr, 0.5 * (-$ys * $prbox[1] + $pbox[1] + $pbox[3]));
+#                $slist[1] = cm(@scalestr, -0.5 * $ys * $prbox[1] + $pbox[1]);
+                $slist[0] = cm(@scalestr, .25 * (3 * $pbox[3] + $pbox[1] - $ys * ($prbox[3] - $prbox[1])) - $prbox[1]);
+                $slist[1] = cm(@scalestr, .25 * (3 * $pbox[1] + $pbox[3] - $ys * ($prbox[3] - $prbox[1])) - $prbox[1]);
             } elsif ($opt_p == 4 && $is == 1)       # true portrait
             {
                 $a = .5 * $xs; $b = .5 * $ys;

@@ -2,6 +2,9 @@ MANIFEST
 Make.PM
 Makefile.PL
 examples/graph.pl
+examples/pdfaddobj.pl
+examples/pdfaddpg.pl
+examples/pdfgetobj.pl
 lib/Text/PDF/Array.pm
 lib/Text/PDF/Bool.pm
 lib/Text/PDF/Dict.pm
@@ -20,9 +23,6 @@ lib/Text/PDF/Utils.pm
 lib/Text/PDF/changes
 pmake.bat
 readme.txt
-scripts/pdfaddobj.plx
-scripts/pdfaddpg.plx
 scripts/pdfbklt.plx
-scripts/pdfgetobj.plx
 scripts/pdfrevert.plx
 scripts/pdfstamp.plx

@@ -46,13 +46,13 @@ sub new
     my ($desc, $sinfo, $unistr, $touni, @rev);
     my ($i, $first, $num, $upem, @wid, $name, $ff2, $ffh);
 
-    my ($self) = $class->SUPER::new($parent, $fontname, $pdfname);
+    my ($self) = $class->SUPER::new($parent, $fontname, $pdfname, -istype0 => 1, %opt);
     my ($font) = $self->{' font'};
 
     $self->{'Subtype'} = PDFName('Type0');
     $self->{'Encoding'} = PDFName('Identity-H');
 
-    $parent->{'Version'} = 3 unless $parent->{'Version'} > 3;
+    $parent->{' version'} = 3 unless $parent->{' version'} > 3;
     $desc = PDFDict();
     $parent->new_obj($desc);
     $desc->{'Type'} = $self->{'Type'};
@@ -66,14 +66,16 @@ sub new
 
     $num = $font->{'maxp'}{'numGlyphs'};
     $upem = $font->{'head'}{'unitsPerEm'};
-    unless ($opt{noWidths})
+    $desc->{'DW'} = $desc->{'FontDescriptor'}{'MissingWidth'};
+    $desc->{'W'} = PDFArray();
+    $parent->new_obj($desc->{'W'});
+    $font->{'hmtx'}->read;
+    unless ($opt{-subset})
     {
-        $font->{'hmtx'}->read;
-        $desc->{'W'} = PDFArray();
         $first = 1;
         for ($i = 1; $i < $num; $i++)
         {
-            push(@wid, PDFNum($font->{'hmtx'}{'advance'}[$i] * 1000 / $upem));
+            push(@wid, PDFNum(int($font->{'hmtx'}{'advance'}[$i] * 1000 / $upem)));
             if ($i % 20 == 19 || $i + 1 >= $num)
             {
                 $desc->{'W'}->add_elements(PDFNum($first),
@@ -82,9 +84,8 @@ sub new
                 $first = $i + 1;
             }
         }
-        $desc->{'DW'} = PDFNum(1000);
     }
-
+    
     $self->{'DescendantFonts'} = PDFArray($desc);
 
     $sinfo = PDFDict();
@@ -95,11 +96,11 @@ sub new
     $desc->{'CIDSystemInfo'} = $sinfo;
     $ff2 = $desc->{'FontDescriptor'}{'FontFile2'};
     delete $ff2->{' streamfile'};
-    $ff2->{' stream'} = "";
-    $ffh = Text::PDF::TTIOString->new(\$ff2->{' stream'});
-    $font->out($ffh, 'cvt ', 'fpgm', 'glyf', 'head', 'hhea', 'hmtx', 'loca', 'maxp', 'prep');
-    $ff2->{'Filter'} = PDFArray(PDFName("FlateDecode"));
-    $ff2->{'Length1'} = PDFNum(length($ff2->{' stream'}));
+#        $ff2->{' stream'} = "";
+#        $ffh = Text::PDF::TTIOString->new(\$ff2->{' stream'});
+#        $font->out($ffh, 'cvt ', 'fpgm', 'glyf', 'head', 'hhea', 'hmtx', 'loca', 'maxp', 'prep');
+#        $ff2->{'Filter'} = PDFArray(PDFName("FlateDecode"));
+#        $ff2->{'Length1'} = PDFNum(length($ff2->{' stream'}));
 
     if ($opt{'ToUnicode'})
     {
@@ -131,6 +132,51 @@ sub new
     $self;
 }
 
+
+=head2 out_text($text)
+
+Returns the string to be put into a content stream for text to be output in this font.
+The text is assumed to be UTF8 encoded and the return string is a glyph sequence for
+the text. If subsetting is enabled, then all the glyphs returned are also marked for
+output.
+
+=cut
+
+sub out_text
+{
+    my ($self, $text) = @_;
+    my (@clist) = Text::PDF::Utils::unpacku($text);
+    my ($f) = $self->{' font'};
+    my ($g, $res);
+
+    foreach $g (map {$f->{'cmap'}->ms_lookup($_)} (@clist))
+    {
+        vec($self->{' subvec'}, $g, 1) = 1 if ($self->{' subset'});
+        $res .= sprintf("%04X", $g);
+    }
+    "<$res>";
+}
+
+
+=head2 width($text)
+
+Returns the width of the string, assuming it to be UTF8 encoded.
+
+=cut
+
+sub width
+{
+    my ($self, $text) = @_;
+    my (@clist) = Text::PDF::Utils::unpacku($text);
+    my ($f) = $self->{' font'};
+    my ($width, $g);
+
+    foreach $g (map {$f->{'cmap'}->ms_lookup($_)} (@clist))
+    { $width += $f->{'hmtx'}{'advance'}[$g]; }
+    $width / $f->{'head'}{'unitsPerEm'};
+}
+    
+
 =head2 outobjdeep($fh, $pdf)
 
 Handles the creation of the font stream including subsetting at this point. So
@@ -141,8 +187,52 @@ if you get this far, that's it for subsetting.
 sub outobjdeep
 {
     my ($self, $fh, $pdf) = @_;
+    my ($d) = $self->{'DescendantFonts'}->val->[0];
+    my ($f) = $self->{' font'};
+    my ($s) = $d->{'FontDescriptor'}{'FontFile2'};
+    my ($ffh);
 
-    $self->SUPER::outobjdeep($fh, $pdf);
+    if ($self->{' subset'})
+    {
+        my ($max) = length($self->{' subvec'}) * 8;
+        my ($upem) = $f->{'head'}{'unitsPerEm'};
+        my ($mode, $miniArr, $i, $j, $first, @minilist);
+        
+        $f->{'glyf'}->read;
+        for ($i = 0; $i <= $max; $i++)
+        {
+            if (!$mode && vec($self->{' subvec'}, $i, 1))
+            {
+                $first = $i;
+                $mode = 1;
+                @minilist = ();
+            } elsif ($mode && !vec($self->{' subvec'}, $i, 1))
+            {
+                for ($j = 0; $j <= $#minilist; $j++)
+                {
+                    if ($j % 20 == 0)
+                    {
+                        $miniArr = PDFArray();
+                        $d->{'W'}->add_elements(PDFNum($first + $j), $miniArr)
+                    }
+                    $miniArr->add_elements(PDFNum($minilist[$j]));
+                }
+                $mode = 0;
+            }
+
+            if ($mode)
+            { push(@minilist, int($f->{'hmtx'}{'advance'}[$i] / $upem * 1000)); }
+            else
+            { $f->{'loca'}{glyphs}[$i] = undef; }
+        }
+    }
+    $s->{' stream'} = "";
+    $ffh = Text::PDF::TTIOString->new(\$s->{' stream'});
+    $f->out($ffh, 'cvt ', 'fpgm', 'glyf', 'head', 'hhea', 'hmtx', 'loca', 'maxp', 'prep');
+    $s->{'Filter'} = PDFArray(PDFName("FlateDecode"));
+    $s->{'Length1'} = PDFNum(length($s->{' stream'}));
+
+    $self->SUPER::outobjdeep($fh, $pdf, 1);
     $self;
 }
 

@@ -40,9 +40,15 @@ source PDF the stream starts.
 
 =head1 METHODS
 
+=cut
+
 sub new
 {
-    my ($self) = SUPER::new(@_);
+    my ($class, @opts) = @_;
+    my ($self);
+
+    $class = ref $class if ref $class;
+    $self = $class->SUPER::new(@_);
     $self->{' realised'} = 1;
     return $self;
 }
@@ -104,13 +110,31 @@ sub outobjdeep
         $fh->seek($loc, 0);
     }
 
-    if ((defined $self->{' stream'} || defined $self->{' streamfile'}) && defined $self->{'Filter'})
+    if (!$self->{' nofilt'}
+            && (defined $self->{' stream'} || defined $self->{' streamfile'})
+            && defined $self->{'Filter'})
     {
-        foreach $f ($self->{'Filter'}->elementsof)
+        my ($hasflate) = -1;
+        my ($temp, $i, $temp1);
+        
+        for ($i = 0; $i <= $#{$self->{'Filter'}{' val'}}; $i++)
         {
-            my ($temp) = "Text::PDF::" . $f->val;
-            push(@filts, $temp->new());
+            $temp = $self->{'Filter'}{' val'}[$i]->val;
+            if ($temp eq 'LZWDecode')               # hack to get around LZW patent
+            {
+                if ($hasflate < -1)
+                {
+                    $hasflate = $i;
+                    next;
+                }
+                $temp = 'FlateDecode';
+                $self->{'Filter'}{' val'}[$i]{'val'} = $temp;      # !!!
+            } elsif ($temp eq 'FlateDecode')
+            { $hasflate = -2; }
+            $temp1 = "Text::PDF::$temp";
+            push (@filts, $temp1->new);
         }
+        splice(@{$self->{'Filter'}{' val'}}, $hasflate, 1) if ($hasflate > -1);
     }
 
     if (defined $self->{' stream'})
@@ -118,8 +142,11 @@ sub outobjdeep
         $fh->print("\nstream\n");
         $loc = $fh->tell;
         $str = $self->{' stream'};
-        foreach $f (reverse @filts)
-        { $str = $f->outfilt($str, 1); }
+        unless ($self->{' nofilt'})
+        {
+            foreach $f (reverse @filts)
+            { $str = $f->outfilt($str, 1); }
+        }
         $fh->print($str);
         $self->{'Length'}{'val'} = $fh->tell - $loc + 1 if $#filts >= 0;
         $fh->print("\nendstream");
@@ -132,15 +159,21 @@ sub outobjdeep
         $loc = $fh->tell;
         while (read(DICTFH, $str, 4096))
         {
-            foreach $f (reverse @filts)
-            { $str = $f->outfilt($str, 0); }
+            unless ($self->{' nofilt'})
+            {
+                foreach $f (reverse @filts)
+                { $str = $f->outfilt($str, 0); }
+            }
             $fh->print($str);
         }
         close(DICTFH);
-        $str = "";
-        foreach $f (reverse @filts)
-        { $str = $f->outfilt($str, 1); }
-        $fh->print($str);
+        unless ($self->{' nofilt'})
+        {
+            $str = "";
+            foreach $f (reverse @filts)
+            { $str = $f->outfilt($str, 1); }
+            $fh->print($str);
+        }
         $self->{'Length'}{'val'} = $fh->tell - $loc + 1;
         $fh->print("\nendstream\n");
 #        $self->{'Length'}->outobjdeep($fh);
@@ -212,6 +245,7 @@ sub read_stream
     }
     
     close DICTFH if (defined $self->{' streamfile'});
+    $self->{' nofilt'} = 0;
     $self;
 }
         

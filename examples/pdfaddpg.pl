@@ -26,12 +26,10 @@ new information is appended to pdffile and can be reverted.
 EOT
 }
 
-print "Reading file\n" unless $opt_q;
 $p = Text::PDF::File->open($ARGV[0], 1);          # open file for appending
 $r = $p->read_obj($p->{'Root'});            # read the page root
 $pgs = $p->read_obj($r->{'Pages'});         # Get the pages tree
 $pgcount = $pgs->{'Count'}->val;            # how many pages
-$opt_p = -1 unless defined $opt_p;
 
 if ($opt_b =~ m/^([0-9]+)\;([0-9]+)/oi)     # parse $opt_b making @pbox
 {
@@ -41,49 +39,11 @@ if ($opt_b =~ m/^([0-9]+)\;([0-9]+)/oi)     # parse $opt_b making @pbox
 else
 { $opt_b = -1 unless defined $opt_b; }
 
-proc_pages($pgs, 0);                        # count recursively through and insert
+$newpage = Text::PDF::Page->new($p, $pgs, $opt_p);
 
 # now set the page's bounding box if it needs setting
 if ($opt_b != -1 || $newpage->find_prop('MediaBox') eq "")
 { $newpage->bbox(@pbox); }
 
 $p->append_file;                            # update appended file
-
-
-# note external references to $pgcount, @pbox, $newpage, $opt_b, $opt_p
-sub proc_pages
-{
-    my ($pgs, $cur) = @_;
-    my ($pg, $pgref, $i);
-
-    foreach $pgref ($pgs->{'Kids'}->elementsof)
-    {
-        print STDERR "." unless $opt_q;
-        $pg = $p->read_obj($pgref);
-        if ($pg->{'Type'}->val =~ m/^Pages$/oi)
-        { $cur = proc_pages($pg, $cur); }
-        else
-        {
-            $cur++;
-            if ($cur == $opt_b || ($cur == 1 && $opt_b == -1))
-            {
-                my ($n);
-                
-                foreach $n ($pg->find_prop('MediaBox')->elementsof)
-                { push(@pbox, $n->val); }
-            }
-            if ($opt_p == -1 && $cur == $pgcount)
-            {
-                $i++;
-                $opt_p = $cur - 1;
-            }
-            if ($opt_p == $cur - 1)
-            { $newpage = Text::PDF::Page->new($p, $pgs, $i); }
-        }
-        $i++;
-    }
-    $cur;
-}
-
-print STDERR "\n" unless $opt_q;
 

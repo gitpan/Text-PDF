@@ -36,7 +36,7 @@ use Font::TTF::Font;
        0x02DC, 0x2122, 0x0161, 0x203A, 0x0153, 0x009D, 0x017E, 0x0178,
        0xA0 .. 0xFF);
 
-$subcount = "BXC000";
+$subcount = "BXCJIM";
 
 =head2 Text::PDF::TTFont->new($parent, $fontfname, $pdfname, %opts)
 
@@ -84,23 +84,6 @@ sub new
     $self->{'BaseFont'} = PDFName($self->{' subname'} . $name);
     $subcount++;
     $self->{'Name'} = PDFName($pdfname);
-    if ($self->{' subset'})
-    {
-        my ($i, $t, $e, $k);
-        
-        $font->{'post'}->read->{'VAL'} = undef;
-        foreach $i (1, 3, 4, 6)
-        {
-            foreach $t (@{$font->{'name'}{'strings'}[$i]})
-            {
-                foreach $e (@$t)
-                {
-                    foreach $k (keys %$e)
-                    { $e->{$k} = $self->{' subname'} . $e->{$k}; }
-                }
-            }
-        }
-    }
     $parent->new_obj($self);
 # leave the encoding & widths, etc. until we know the glyph list
 
@@ -117,7 +100,7 @@ sub new
 #            int($font->{'loca'}->read->{'glyphs'}[$font->{'post'}{'STRINGS'}{"H"}]->read->{'yMax'}
 #            * 1000 / $upem));
     $f->{'StemV'} = PDFNum(0);                       # no way!
-    $f->{'FontName'} = PDFName($name);
+    $f->{'FontName'} = $self->{'BaseFont'};
     $f->{'ItalicAngle'} = PDFNum($font->{'post'}->read->{'italicAngle'});
     $f->{'FontBBox'} = PDFArray(
             PDFNum(int($font->{'head'}{'xMin'} * 1000 / $upem)),
@@ -135,7 +118,7 @@ sub new
     $f->{'Flags'} = PDFNum($flags);
     
 #    $f->{'MaxWidth'} = PDFNum(int($font->{'hhea'}{'advanceWidthMax'} * 1000 / $upem));
-#    $f->{'MissingWidth'} = PDFNum($f->{'MaxWidth'}->val - 1);
+    $f->{'MissingWidth'} = PDFNum(int($font->{'hhea'}{'advanceWidthMax'} * 1000 / $upem) + 2);
     $f->{' notdef'} = PDFNum(".notdef");
 
     $s = PDFDict();
@@ -148,10 +131,13 @@ sub new
     $font->{'cmap'}->read->find_ms;
     $self->{' issymbol'} = $font->{'cmap'}{' mstable'}{'Platform'} == 3 && $font->{'cmap'}{' mstable'}{'Encoding'} == 0;
     $font->{'hmtx'}->read;
-    $w = PDFArray(map {PDFNum(int($font->{'hmtx'}{'advance'}[$font->{'cmap'}->ms_lookup($_)] / $font->{'head'}{'unitsPerEm'} * 1000))}
-        $self->{' issymbol'} ? (0xf000 .. 0xf0ff) : @cp1252);
-    $parent->new_obj($w);
-    $self->{'Widths'} = $w;
+    unless ($opts{'-istype0'})
+    {
+        $w = PDFArray(map {PDFNum(int($font->{'hmtx'}{'advance'}[$font->{'cmap'}->ms_lookup($_)] / $font->{'head'}{'unitsPerEm'} * 1000))}
+                $self->{' issymbol'} ? (0xf000 .. 0xf0ff) : @cp1252);
+        $parent->new_obj($w);
+        $self->{'Widths'} = $w;
+    }
     if ($self->{' subset'})
     {
         $self->{' minCode'} = 255;
@@ -234,100 +220,6 @@ sub out_text
 }
 
 
-=head2 $t->add_glyphs($font, $first, \@glyphs)
-
-This function allows you to add glyphs to a PDF font based on glyphs in the
-TrueType font. $first contains the 8-bit codepoint of the first glyph. The
-rest of the glyphs follow on sequentially.
-
-It is possible to add sets of glyphs in different calls to this function, but
-it is strongly recommended that they be added in monotonic, non-overlapping
-order. The function will trim the incoming list if it overlaps the existing
-list, which cannot contain gaps.
-
-=cut
-
-sub add_glyphs
-{
-    my ($self, $first, $ref) = @_;
-    my ($last) = $first + $#{$ref};
-    my ($i, $upem, @widths, @encs);
-    my ($oldfirst, $oldlast, $font);
-    my ($miss) = $self->{'FontDescriptor'}{'MissingWidth'};
-    my ($notdef) = $self->{'FontDescriptor'}{' notdef'};
-
-    $font = $self->{' font'};
-    $oldfirst = $self->{'FirstChar'}->val if $self->{'FirstChar'} ne "";
-    $oldlast = $self->{'LastChar'}->val if $self->{'LastChar'} ne "";
-    $upem = $font->{'head'}{'unitsPerEm'};
-
-
-# This assumes that $first < $oldfirst && $last > $oldlast
-    if ($first < $oldfirst && $last > $oldfirst)
-    {
-        splice(@$ref, $oldfirst - $first);
-        $last = $oldfirst - 1;
-    } elsif ($first < $oldlast && $last > $oldlast)
-    {
-        splice(@$ref, 0, $oldlast - $first + 1);
-        $first = $oldlast + 1;
-    }
-
-    unless ($self->{'Widths'} ne "")
-    {
-        $self->{'Widths'} = PDFArray();
-        $self->{' outto'}->new_obj($self->{'Widths'});
-        $self->{'Encoding'} = PDFArray();
-    }
-
-    if ($last < $oldfirst - 1)
-    {
-        unshift(@{$self->{'Widths'}->val}, ($miss) x ($oldfirst - $last - 1));
-        splice(@{$self->{'Encoding'}->val}, 0, 1, ($notdef) x ($oldfirst - $last - 1));
-        $oldfirst = $last + 1;
-    }
-    elsif ($first < $oldfirst)
-    { shift(@{$self->{'Encoding'}->val}); }
-        
-    if ($first > $oldlast + 1 && $oldlast > 0)
-    {
-        push(@{$self->{'Widths'}->val}, ($miss) x ($first - $oldlast - 1));
-        push(@{$self->{'Encoding'}->val}, ($notdef) x ($first - $oldlast - 1));
-        $oldlast = $first - 1;
-    }
-
-    $font->{'hmtx'}->read;
-    $font->{'post'}->read;
-    for ($i = 0; $i < $last - $first; $i++)
-    {
-        push(@widths, defined $ref->[$i] ?
-                PDFNum(int($font->{'hmtx'}{'advance'}[$ref->[$i]] * 1000 / $upem))
-                : $miss);
-        push(@encs, defined $ref->[$i] && $font->{'post'}{'VAL'}[$ref->[$i]] ne ".notdef" ?
-                PDFName($font->{'post'}{'VAL'}[$ref->[$i]])
-                : $notdef);
-    }
-
-    if ($last > $oldlast)
-    {
-        push (@{$self->{'Widths'}->val}, @widths);
-        push (@{$self->{'Encoding'}->val}, @encs);
-    } else
-    {
-        unshift(@{$self->{'Widths'}->val}, @widths);
-        splice(@{$self->{'Encoding'}->val}, 0, 1, @encs);
-    }
-    $oldfirst = $first;
-    $oldlast = $last;
-    unshift(@{$self->{'Encoding'}->val}, PDFNum($oldfirst));
-    $self->{'FirstChar'} = PDFNum(0) unless $self->{'FirstChar'} ne "";
-    $self->{'LastChar'} = PDFNum(0) unless $self->{'LastChar'} ne "";
-    $self->{'FirstChar'}{'val'} = $oldfirst;
-    $self->{'LastChar'}{'val'} = $oldlast;
-    $self;
-}
-
-
 =head2 $f->copy
 
 Copies the font object excluding the name, widths and encoding, etc.
@@ -349,9 +241,13 @@ sub copy
 
 sub outobjdeep
 {
-    my ($self, $fh, $pdf) = @_;
-    my ($s) = $self->{'FontDescriptor'}{'FontFile2'};
+    my ($self, $fh, $pdf, $passthru) = @_;
+    
+    return $self->SUPER::outobjdeep($fh, $pdf) if $passthru;
+
     my ($f) = $self->{' font'};
+    my ($d) = $self->{'FontDescriptor'};
+    my ($s) = $d->{'FontFile2'};
     my ($vec, $ffh, $i, $t, $k, $maxuni, $minuni);
 
     $self->{'FirstChar'} = PDFNum($self->{' minCode'});
@@ -371,7 +267,7 @@ sub outobjdeep
                 vec($vec, $f->{'cmap'}->ms_lookup($t), 1) = 1;
             }
             elsif ($i >= $self->{' minCode'} && $i <= $self->{' maxCode'})
-            { $self->{'Widths'}{' val'}[$i - $self->{' minCode'}] = PDFNum(0); }
+            { $self->{'Widths'}{' val'}[$i - $self->{' minCode'}] = $d->{'MissingWidth'}; }
         }
         $f->{'glyf'}->read;
         for ($i = 0; $i <= $#{$f->{'loca'}{'glyphs'}}; $i++)
@@ -379,23 +275,10 @@ sub outobjdeep
             next if vec($vec, $i, 1);
             $f->{'loca'}{'glyphs'}[$i] = undef;
         }
-        foreach $t (@{$f->{'cmap'}{'Tables'}})
-        {
-            if ($t->{'Platform'} == 1)
-            {
-                for ($i = 0; $i < 256; $i++)
-                { $t->{'val'}{$i} = 0 unless vec($self->{' subvec'}, $i, 1); }
-            } else              # ignore some wierd cmaps (like non-Unicode ones!)
-            {
-                foreach $k (keys %{$t->{'val'}})
-                { delete $t->{'val'}{$k} unless vec($vec, $t->{'val'}{$k}, 1); }
-            }
-        }
-        $f->{'OS/2'}->read->{'usFirstCharIndex'} = $minuni;
-        $f->{'OS/2'}{'usLastCharIndex'} = $maxuni;
         $s->{' stream'} = "";
         $ffh = Text::PDF::TTIOString->new(\$s->{' stream'});
-        $f->out($ffh, 'OS/2', 'cmap', 'cvt ', 'fpgm', 'glyf', 'head', 'hhea', 'hmtx', 'loca', 'maxp', 'name', 'post', 'prep');
+        $f->out($ffh, 'cmap', 'cvt ', 'fpgm', 'glyf', 'head', 'hhea', 'hmtx', 'loca', 'maxp', 'prep');
+        $s->{'Length1'} = PDFNum(length($s->{' stream'}));
     }
 
     $self->SUPER::outobjdeep($fh, $pdf);

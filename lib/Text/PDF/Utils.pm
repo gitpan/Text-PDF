@@ -127,5 +127,45 @@ Returns a number in PDF output form
 sub asPDFNum
 { $_[0]; }          # no translation needed
 
+
+=head2 unpacku($str)
+
+Returns a list of unicode values for the given UTF8 string
+
+=cut
+
+sub unpacku
+{
+    my ($str) = @_;
+    my (@res);
+
+    return (unpack("U*", $str)) if ($^V ge v5.6.0);
+    
+    $str = "$str";              # copy $str
+    while (length($str))        # Thanks to Gisle Aas for some of his old code
+    {
+        $str =~ s/^[\x80-\xBF]+//o;
+        if ($str =~ s/^([\x00-\x7F]+)//o)
+        { push(@res, unpack("C*", $1)); }
+        elsif ($str =~ s/^([\xC0-\xDF])([\x80-\xBF])//o)
+        { push(@res, ((ord($1) & 0x1F) << 6) | (ord($2) & 0x3F)); }
+        elsif ($str =~ s/^([\0xE0-\xEF])([\x80-\xBF])([\x80-\xBF])//o)
+        { push(@res, ((ord($1) & 0x0F) << 12)
+                          | ((ord($2) & 0x3F) << 6)
+                          | (ord($3) & 0x3F)); }
+        elsif ($str =~ s/^([\xF0-\xF7])([\x80-\xBF])([\x80-\xBF])([\x80-\xBF])//o)
+        {
+            my ($b1, $b2, $b3, $b4) = (ord($1), ord($2), ord($3), ord($4));
+            push(@res, ((($b1 & 0x07) << 8) | (($b2 & 0x3F) << 2)
+                            | (($b3 & 0x30) >> 4)) + 0xD600);  # account for offset
+            push(@res, ((($b3 & 0x0F) << 6) | ($b4 & 0x3F)) + 0xDC00);
+        }
+        elsif ($str =~ s/^[\xF8-\xFF][\x80-\xBF]*//o)
+        { }
+    }
+    @res;
+}
+
+
 1;
 

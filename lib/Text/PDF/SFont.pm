@@ -77,7 +77,7 @@ sub new
     my ($class, $parent, $name, $pdfname, $encoding) = @_;
     my ($self) = $class->SUPER::new;
 
-    return undef unless exists $width_data{$pdfname};
+    return undef unless exists $width_data{$name};
     $self->{'Type'} = PDFName("Font");
     $self->{'Subtype'} = PDFName("Type1");
     $self->{'BaseFont'} = PDFName($name);

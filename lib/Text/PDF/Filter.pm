@@ -310,5 +310,79 @@ sub infilt
     $res;
 }
 
+package Text::PDF::LZWDecode;
+
+use vars qw(@ISA @basedict);
+@ISA = qw(Text::PDF::FlateDecode);
+@basedict = map {pack("C", $_)} (0 .. 255, 0, 0);
+
+sub new
+{
+    my ($class) = @_;
+    my ($self) = {};
+
+    $self->{'indict'} = [@basedict];
+    $self->{'insize'} = 9;
+#    $self->{'outfilt'} = Compress::Zlib::deflateInit();     # patent precludes LZW encoding
+    bless $self, $class;
+}
+
+sub infilt
+{
+    my ($self, $dat, $last) = @_;
+    my ($num, $cache, $cache_size, $res, $mode, $count);
+
+    $count = 258;
+    while ($dat ne '' || $cache_size > 0)
+    {
+        ($num, $cache, $cache_size) = $self->read_dat(\$dat, $cache, $cache_size, $self->{'insize'});
+        return $res if ($num == 257);
+        if ($num == 256)
+        {
+             $self->{'indict'} = [@basedict];
+             $self->{'insize'} = 9;
+             $count = 258;
+             undef $mode;
+             next;
+        }
+        if (defined $mode)
+        {
+            $self->{'indict'}[$count] = $mode . substr($self->{'indict'}[$num], 0, 1);
+            $count++;
+        }
+        $mode = $self->{'indict'}[$num];
+        $res .= $mode;
+        if ($count >= 4096)
+        {
+            $self->{'indict'} = [@basedict];
+            $self->{'insize'} = 9;
+        } elsif ($count == 511)
+        { $self->{'insize'} = 10; }
+        elsif ($count == 1023)
+        { $self->{'insize'} = 11; }
+        elsif ($count == 2047)
+        { $self->{'insize'} = 12; }
+    }
+    return $res;
+}
+
+sub read_dat
+{
+    my ($self, $rdat, $cache, $size, $len) = @_;
+    my ($res);
+
+    while ($size < $len)
+    {
+        $cache = ($cache << 8) + unpack("C", $$rdat);
+        substr($$rdat, 0, 1) = '';
+        $size += 8;
+    }
+
+    $res = $cache >> ($size - $len);
+    $cache &= (1 << ($size - $len)) - 1;
+    $size -= $len;
+    ($res, $cache, $size);
+}
+
 1;
 

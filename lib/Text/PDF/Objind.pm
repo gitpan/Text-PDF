@@ -96,6 +96,15 @@ sub val
     $self->{' parent'}->read_obj($self)->val unless ($self->{' realised'});
 }
 
+=head2 $r->realise
+
+Makes sure that the object is fully read in, etc.
+
+=cut
+
+sub realise
+{ $_[0]->{' realised'} ? $_[0] : $_[0]->{' parent'}->read_obj($_[0]); }
+
 =head2 $r->outobjdeep($fh, $pdf)
 
 If you really want to output this object, then you must need to read it first.

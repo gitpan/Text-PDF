@@ -2,13 +2,12 @@
 use Text::PDF::File;
 use Text::PDF::SFont;
 use Text::PDF::Utils;
-use Text::PDF::TTFont;
 
 use Getopt::Std;
 
 getopts('f:l:s:t:');
 
-unless (defined $ARGV[1])
+unless (defined $ARGV[1] && -f $ARGV[0])
 {
     die <<'EOT';
     addstr [-f font] [-l locx,locy] [-s size] infile string
@@ -22,14 +21,16 @@ size.
 EOT
 }
 
+require Text::PDF::TTFont if ($opt_t);
+
 $opt_f = 'Helvetica' unless $opt_f;
 $opt_s = 11 unless $opt_s;
 $opt_l =~ s/,\s*/ /o;
 $opt_l = "0 0" unless $opt_l;
 
 $pdf = Text::PDF::File->open($ARGV[0], 1);
-$root = $pdf->read_obj($pdf->{'Root'});
-$pgs = $pdf->read_obj($root->{'Pages'});
+$root = $pdf->{'Root'}->realise;
+$pgs = $root->{'Pages'}->realise;
 
 @pglist = proc_pages($pdf, $pgs);
 
@@ -50,7 +51,7 @@ foreach $p (@pglist)
 
 $max++;
 if ($opt_t)
-{ $font = Text::PDF::TTFont->new($pdf, $opt_t, "ap$max", -subset => 0) || die "Can't work with font $opt_t"; }
+{ $font = Text::PDF::TTFont->new($pdf, $opt_t, "ap$max", -subset => 1) || die "Can't work with font $opt_t"; }
 else
 { $font = Text::PDF::SFont->new($pdf, $opt_f, "ap$max") || die "Can't create font $opt_f"; }
 $stream = PDFDict();
@@ -72,7 +73,6 @@ sub proc_pages
 
     foreach $pgref ($pgs->{'Kids'}->elementsof)
     {
-        print STDERR "." unless $opt_q;
         $pg = $pdf->read_obj($pgref);
         if ($pg->{'Type'}->val =~ m/^Pages$/oi)
         { push(@pglist, proc_pages($pdf, $pg)); }

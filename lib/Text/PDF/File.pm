@@ -138,7 +138,9 @@ use Text::PDF::Number;
 use Text::PDF::Objind;
 use Text::PDF::String;
 
-$VERSION = "0.11";      # MJPH  18-JUL-2000     Add pdfstamp.plx and more debugging
+
+$VERSION = "0.12";      # MJPH  29-JUL-2000     Add font subsetting, random page insertion
+#$VERSION = "0.11";      # MJPH  18-JUL-2000     Add pdfstamp.plx and more debugging
 #$VERSION = "0.10";	     # MJPH	 27-JUN-2000     Tidy up some bugs - names
 #$VERSION = "0.09";	     # MJPH	 31-MAR-2000     Copy trailer dictionary properly
 #$VERSION = "0.08";      # MJPH  07-FEB-2000     Add null element
@@ -298,7 +300,7 @@ sub out_file
 =head2 $p->create_file($fname)
 
 Creates a new output file (no check is made of an existing open file) of
-the given filename or IO object. Note, make sure that $p->{'Version'} is set
+the given filename or IO object. Note, make sure that $p->{' version'} is set
 correctly before calling this function.
 
 =cut
@@ -318,7 +320,7 @@ sub create_file
     }
 
     $self->{' OUTFILE'} = $fh;
-    $fh->print("%PDF-1." . ($self->{'Version'} || "2") . "\n");
+    $fh->print("%PDF-1." . ($self->{' version'} || "2") . "\n");
     $fh->print("%Çì¢\n");              # and some binary stuff in a comment
     $self;
 }
@@ -414,6 +416,7 @@ sub readval
             { $value = ""; }
             $value .= substr($str, 0, $k);
             $res->{' stream'} = $value;
+            $res->{' nofilt'} = 1;
             $str = update($fh, $str);
             $str =~ m/^endstream$cr/oi;
             $str = $';
@@ -559,22 +562,22 @@ sub new_obj
     $tdict = $self;
     while (defined $tdict)
     {
-        $i = 0;
-        while ($tdict->{' xref'}{$i}[0] != 0)
+        $i = $tdict->{' xref'}{$i}[0];
+        while ($i != 0)
         {
             ($ni, $ng) = @{$tdict->{' xref'}{$i}};
-            if (!defined $self->locate_obj($ni, $ng))
+            if (!defined $self->locate_obj($i, $ng))
             {
                 if (defined $base)
                 {
-                    $self->add_obj($base, $ni, $ng);
+                    $self->add_obj($base, $i, $ng);
                     return $base;
                 }
                 else
                 {
-                    $res = $self->test_obj($ni, $ng)
-                            || $self->add_obj(Text::PDF::Objind->new(), $ni, $ng);
-                    $tdict->{' xref'}{$i}[0] = $tdict->{' xref'}{$ni}[0];
+                    $res = $self->test_obj($i, $ng)
+                            || $self->add_obj(Text::PDF::Objind->new(), $i, $ng);
+                    $tdict->{' xref'}{$i}[0] = $tdict->{' xref'}{$i}[0];
                     $self->out_obj($res);
                     return $res;
                 }
@@ -666,7 +669,7 @@ that it will not cause the data already output to be changed.
 sub ship_out
 {
     my ($self, @objs) = @_;
-    my ($n, @outlist, $fh, $objind);
+    my ($n, @outlist, $fh, $objind, $i, $j);
 
     return unless defined($fh = $self->{' OUTFILE'});
     seek($fh, 0, 2);            # go to the end of the file
@@ -675,9 +678,17 @@ sub ship_out
     foreach $objind (@objs)
     {
         next unless $objind->is_obj($self);
-        @outlist = grep {$_ ne $objind} @{$self->{' outlist'}};
-        next if ($#outlist == $#{$self->{' outlist'}});
-        @{$self->{' outlist'}} = @outlist;
+        $j = -1;
+        for ($i = 0; $i <= $#{$self->{' outlist'}}; $i++)
+        {
+            if ($self->{' outlist'}[$i] eq $objind)
+            {
+                $j = $i;
+                last;
+            }
+        }
+        next if ($j < 0);
+        splice(@{$self->{' outlist'}}, $j, 1);
         next if grep {$_ eq $objind} @{$self->{' free'}};
 
         $self->{' locs'}{$objind->uid} = $fh->tell;
